@@ -1,14 +1,4 @@
-# Dev 모드에서만 PDF 다운로드 옵션 표시
-        if st.session_state.current_dev_mode:
-            st.markdown("---")
-            st.subheader("📄 앱 상태 내보내기")
-            if st.button("📥 전체 앱 PDF 다운로드"):
-                generate_full_app_pdf()
-            
-            if st.session_state.generated_roadmap:
-                st.info("💡 현재 화면의 모든 설정, 입력값, 생성된 로드맵을 포함한 완전한 PDF를 생성합니다.")
-            else:
-                st.warning("⚠️ 로드맵을 먼저 생성하면 더 완전한 PDF를 받을 수 있습니다.")import streamlit as st
+import streamlit as st
 from openai import OpenAI
 import requests
 from bs4 import BeautifulSoup
@@ -165,6 +155,7 @@ def generate_roadmap(topic, level, detailed_level, duration, model="gpt-4o-mini"
             except:
                 st.error("JSON 자동 수정도 실패했습니다. 다시 시도해주세요.")
                 return None
+                
     except Exception as e:
         st.error(f"로드맵 생성 중 오류 발생: {str(e)}")
         return None
@@ -572,10 +563,6 @@ def search_real_resources(topic, search_keywords):
     
     return common_resources
 
-# 메인 UI
-st.title("🗺️ AI 학습 로드맵 생성기")
-st.markdown("---")
-
 # API 키 입력
 with st.sidebar:
     st.header("⚙️ 설정")
@@ -594,6 +581,9 @@ with st.sidebar:
         type="password",
         help="OpenAI API 키를 입력하세요"
     )
+    
+    if api_key_input != st.session_state.openai_api_key:
+        st.session_state.openai_api_key = api_key_input
     
     # Dev 모드일 때만 모델 선택 표시
     if dev_mode:
@@ -645,9 +635,6 @@ with st.sidebar:
         model_choice = st.session_state.current_model
         temperature = st.session_state.current_temperature
         max_tokens = st.session_state.current_max_tokens
-    
-    if api_key_input != st.session_state.openai_api_key:
-        st.session_state.openai_api_key = api_key_input
     
     if st.button("API 키 확인"):
         if init_openai():
@@ -732,116 +719,6 @@ with col2:
                         st.write(f"테스트 응답: {test_response.choices[0].message.content}")
                     except Exception as e:
                         st.error(f"❌ 모델 테스트 실패: {str(e)}")
-        
-        st.markdown("---")
-        if st.button("📄 전체 앱 PDF 다운로드"):
-            generate_full_app_pdf()
-        
-        st.markdown("---")
-        st.subheader("📸 전체 화면 캡처")
-        
-        if st.button("📱 전체 앱 스크린샷 생성"):
-            st.markdown("""
-            **📷 전체 화면 캡처 가이드:**
-            
-            1. **모든 요소 펼치기:**
-               - 사이드바 설정들 확인
-               - 생성된 로드맵의 모든 주차별 expander 펼치기
-               - 페이지 맨 아래까지 스크롤해서 모든 콘텐츠 로드
-            
-            2. **브라우저 캡처 (추천):**
-               - 페이지 맨 위로 이동
-               - `F12` → 개발자 도구 열기
-               - `Ctrl+Shift+P` → "Capture full size screenshot" 입력
-               - 또는 Chrome 확장 프로그램: "GoFullPage", "FireShot" 사용
-            
-            3. **인쇄를 통한 PDF:**
-               - `Ctrl+P` → "PDF로 저장"
-               - 설정에서 "배경 그래픽" 체크
-               - "더 많은 설정" → "여백: 없음"
-               
-            4. **캡처 최적화 설정 적용됨:**
-               - 가상 스크롤링 비활성화
-               - 모든 요소 강제 렌더링
-               - 캡처 친화적 CSS 적용
-            """)
-            
-            # 캡처 최적화 CSS 적용
-            st.markdown("""
-            <style>
-            /* 캡처 최적화 CSS */
-            .main .block-container {
-                max-width: none !important;
-                padding-top: 1rem;
-                padding-bottom: 2rem;
-            }
-            
-            /* 가상 스크롤링 비활성화 */
-            div[data-testid="stVerticalBlock"] {
-                height: auto !important;
-                overflow: visible !important;
-            }
-            
-            /* 모든 expander 강제 표시 */
-            .streamlit-expanderHeader {
-                pointer-events: none;
-            }
-            
-            /* 사이드바 고정 */
-            .css-1d391kg {
-                position: relative !important;
-            }
-            
-            /* 인쇄 최적화 */
-            @media print {
-                .css-1d391kg {
-                    position: static !important;
-                    width: 100% !important;
-                }
-                
-                .main {
-                    margin-left: 0 !important;
-                }
-                
-                body {
-                    zoom: 0.8;
-                }
-            }
-            
-            /* 모든 요소 강제 렌더링 */
-            * {
-                -webkit-print-color-adjust: exact !important;
-                color-adjust: exact !important;
-            }
-            </style>
-            """, unsafe_allow_html=True)
-            
-            # JavaScript로 모든 expander 자동 펼치기
-            st.markdown("""
-            <script>
-            // 모든 expander 펼치기
-            setTimeout(function() {
-                const expanders = document.querySelectorAll('[data-testid="stExpander"] summary');
-                expanders.forEach(function(expander) {
-                    if (!expander.parentElement.hasAttribute('open')) {
-                        expander.click();
-                    }
-                });
-                
-                // 스크롤을 맨 아래까지 해서 모든 요소 로드
-                window.scrollTo(0, document.body.scrollHeight);
-                
-                // 다시 맨 위로
-                setTimeout(function() {
-                    window.scrollTo(0, 0);
-                }, 1000);
-                
-            }, 500);
-            </script>
-            """, unsafe_allow_html=True)
-            
-            st.success("✅ 캡처 최적화가 적용되었습니다! 위 가이드를 따라 전체 화면을 캡처하세요.")
-            st.info("💡 **팁**: 잠시 기다린 후 모든 요소가 펼쳐지면 캡처하세요.")
 
 # 로드맵 생성
 if st.button("🚀 로드맵 생성", type="primary", use_container_width=True):
@@ -872,7 +749,6 @@ if st.button("🚀 로드맵 생성", type="primary", use_container_width=True):
         with col2:
             if st.session_state.current_dev_mode:
                 st.info(f"🤖 **사용 모델**: {st.session_state.current_model}")
-
         
         # 사전 요구사항
         if 'prerequisites' in roadmap_data:
@@ -975,6 +851,18 @@ if st.button("🚀 로드맵 생성", type="primary", use_container_width=True):
                     st.write(f"• [{site_name}에서 검색]({search_url})")
             
             st.info("💡 **팁**: 위 링크들을 클릭해서 실제 최신 자료를 찾아보세요!")
+        
+        # Dev 모드에서만 PDF 다운로드 옵션 표시
+        if st.session_state.current_dev_mode:
+            st.markdown("---")
+            st.subheader("📄 앱 상태 내보내기")
+            if st.button("📥 전체 앱 PDF 다운로드"):
+                generate_full_app_pdf()
+            
+            if st.session_state.generated_roadmap:
+                st.info("💡 현재 화면의 모든 설정, 입력값, 생성된 로드맵을 포함한 완전한 PDF를 생성합니다.")
+            else:
+                st.warning("⚠️ 로드맵을 먼저 생성하면 더 완전한 PDF를 받을 수 있습니다.")
 
 # 푸터
 st.markdown("---")

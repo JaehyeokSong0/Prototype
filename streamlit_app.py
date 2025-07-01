@@ -44,36 +44,43 @@ def generate_roadmap(topic, level, detailed_level, duration, model="gpt-4o-mini"
     {level_info}
     학습 기간: {duration}
     
-    위 정보를 바탕으로 **{current_date} 현재 최신 버전 기준**으로 체계적인 학습 로드맵을 생성해주세요.
+    위 정보를 바탕으로 **{current_date} 현재 최신 버전 기준**으로 체계적이고 구체적인 학습 로드맵을 생성해주세요.
     
     **필수 요구사항:**
     1. 반드시 유효한 JSON 형식으로만 응답
-    2. **절대 가짜 링크나 예시 URL을 만들지 마세요**
-    3. 리소스는 일반적인 설명으로만 제공 (예: "공식 문서", "YouTube 튜토리얼", "GitHub 저장소")
-    4. 구체적인 URL이 확실하지 않다면 링크를 포함하지 마세요
-    5. 모든 정보는 2024년 말 ~ 2025년 최신 버전 기준
-    6. 학습자의 상세한 현재 수준을 고려하여 효율적인 커리큘럼 구성
+    2. 각 주차별로 구체적이고 실행 가능한 학습 내용 제시
+    3. 실제 완성할 수 있는 프로젝트나 실습 과제 포함
+    4. 학습 후 달성할 수 있는 명확한 기술적 목표 설정
+    5. 각 주차별로 서로 다른 심화 내용으로 진행
+    6. 모든 정보는 2024년 말 ~ 2025년 최신 버전 기준
+    
+    **예시 (Unity ML-Agents의 경우):**
+    - 모호함: "ML-Agents 기초 학습" ❌
+    - 구체적: "간단한 공 굴리기 에이전트 구현하여 목표 지점 도달 학습" ✅
     
     정확히 다음 JSON 형식으로만 응답하세요:
     {{
         "roadmap": [
             {{
                 "week": 1,
-                "title": "주차 제목",
-                "topics": ["주제1", "주제2"],
-                "resources": ["공식 문서 읽기", "YouTube 튜토리얼 시청", "실습 프로젝트 진행"],
-                "goals": "학습 목표",
-                "notes": "주의사항"
+                "title": "구체적인 주차 제목",
+                "topics": ["구체적인 기술이나 개념", "실제 구현할 기능"],
+                "practical_tasks": ["실제로 만들 프로젝트", "완성할 코드나 기능"],
+                "resources": ["구체적인 학습 방법 (예: Unity 공식 튜토리얼 3장)", "특정 GitHub 저장소 분석"],
+                "goals": "이번 주 완료 후 정확히 할 수 있게 되는 것",
+                "deliverables": ["제출하거나 완성할 구체적인 결과물"],
+                "week_specific_keywords": ["이번 주차에만 해당하는 검색 키워드"]
             }}
         ],
-        "prerequisites": ["요구사항1", "요구사항2"],
-        "final_goals": ["목표1", "목표2"],
+        "prerequisites": ["구체적인 사전 지식이나 설치할 도구"],
+        "final_goals": ["최종적으로 만들 수 있게 되는 구체적인 프로젝트나 기능"],
         "version_info": "최신 버전 정보",
         "last_updated": "{current_date}",
-        "search_keywords": ["검색키워드1", "검색키워드2"]
+        "difficulty_progression": "난이도 진행 설명"
     }}
     
-    다른 설명 없이 오직 JSON만 응답하세요. 가짜 URL은 절대 만들지 마세요.
+    **중요**: 모든 내용은 실제로 실행 가능하고 측정 가능한 구체적인 내용으로만 작성하세요.
+    다른 설명 없이 오직 JSON만 응답하세요.
     """
     
     try:
@@ -389,6 +396,18 @@ if st.button("🚀 로드맵 생성", type="primary", use_container_width=True):
                     st.write("**🎯 목표:**")
                     st.write(week_data.get('goals', ''))
                     
+                    # 실습 과제 추가
+                    if 'practical_tasks' in week_data:
+                        st.write("**🛠️ 실습 과제:**")
+                        for task in week_data['practical_tasks']:
+                            st.write(f"• {task}")
+                    
+                    # 완성 목표물 추가
+                    if 'deliverables' in week_data:
+                        st.write("**📦 완성 목표:**")
+                        for deliverable in week_data['deliverables']:
+                            st.write(f"✅ {deliverable}")
+                    
                     if 'notes' in week_data and week_data['notes']:
                         st.write("**⚠️ 최신 버전 주의사항:**")
                         st.warning(week_data['notes'])
@@ -397,30 +416,39 @@ if st.button("🚀 로드맵 생성", type="primary", use_container_width=True):
                     st.write("**🔗 학습 자료:**")
                     resources = week_data.get('resources', [])
                     
-                    # 일반적인 리소스 설명으로 표시
+                    # 구체적인 리소스 설명으로 표시
                     for resource in resources:
                         st.write(f"• {resource}")
                     
-                    # 실제 리소스 검색 제안
-                    if 'search_keywords' in roadmap_data and roadmap_data['search_keywords']:
-                        st.write("**🔍 추천 검색:**")
-                        for keyword in roadmap_data['search_keywords'][:3]:  # 상위 3개만
-                            search_query = f"{topic} {keyword}"
+                    # 주차별 특화 검색
+                    if 'week_specific_keywords' in week_data and week_data['week_specific_keywords']:
+                        st.write("**🔍 이번 주 특화 검색:**")
+                        for keyword in week_data['week_specific_keywords']:
+                            search_query = f"{topic} {keyword} tutorial"
                             google_search_url = f"https://www.google.com/search?q={search_query.replace(' ', '+')}"
-                            st.write(f"• [{keyword} 검색]({google_search_url})")
+                            st.write(f"• [{keyword}]({google_search_url})")
                     
-                    # 일반적인 리소스 타입 제안
-                    with st.expander("💡 리소스 찾기 팁", expanded=False):
-                        st.write(f"**{topic} 학습을 위한 추천 리소스:**")
-                        suggested_resources = search_real_resources(topic, roadmap_data.get('search_keywords', []))
-                        for resource_type, description in suggested_resources.items():
-                            st.write(f"• **{resource_type}**: {description}")
+                    # 주차별 진도 체크
+                    progress_key = f"week_{week_data['week']}_completed"
+                    completed = st.checkbox(
+                        f"{week_data['week']}주차 완료", 
+                        key=progress_key,
+                        help="이번 주차 학습을 완료했으면 체크하세요"
+                    )
         
-        # 최종 목표
-        if 'final_goals' in roadmap_data:
-            st.subheader("🏆 최종 학습 목표")
-            for goal in roadmap_data['final_goals']:
-                st.write(f"• {goal}")
+        # 최종 목표와 난이도 진행
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if 'final_goals' in roadmap_data:
+                st.subheader("🏆 최종 완성 목표")
+                for goal in roadmap_data['final_goals']:
+                    st.write(f"• {goal}")
+        
+        with col2:
+            if 'difficulty_progression' in roadmap_data:
+                st.subheader("📈 난이도 진행")
+                st.info(roadmap_data['difficulty_progression'])
         
         # 실제 리소스 찾기 도구
         if search_latest:
@@ -450,5 +478,6 @@ if st.button("🚀 로드맵 생성", type="primary", use_container_width=True):
 
 # 푸터
 st.markdown("---")
-st.markdown("💡 **팁**: 현재 수준을 상세히 설명할수록 더 정확하고 효율적인 로드맵을 받을 수 있습니다!")
+st.markdown("💡 **팁**: 현재 수준을 상세히 설명할수록 더 구체적이고 실행 가능한 로드맵을 받을 수 있습니다!")
+st.markdown("🎯 **목표**: 각 주차별로 실제 완성할 수 있는 구체적인 결과물이 있는 로드맵")
 st.markdown("🔄 **최신성 보장**: 모든 로드맵은 2025년 최신 버전 기준으로 생성됩니다.")

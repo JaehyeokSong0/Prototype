@@ -48,10 +48,11 @@ def generate_roadmap(topic, level, detailed_level, duration, model="gpt-4o-mini"
     
     **필수 요구사항:**
     1. 반드시 유효한 JSON 형식으로만 응답
-    2. 문자열에는 반드시 이스케이프 처리된 따옴표 사용
-    3. 모든 리소스와 API는 2024년 말 ~ 2025년 최신 버전 기준
-    4. 공식 문서 링크는 현재 활성화된 최신 버전만 사용
-    5. 학습자의 상세한 현재 수준을 고려하여 효율적인 커리큘럼 구성
+    2. **절대 가짜 링크나 예시 URL을 만들지 마세요**
+    3. 리소스는 일반적인 설명으로만 제공 (예: "공식 문서", "YouTube 튜토리얼", "GitHub 저장소")
+    4. 구체적인 URL이 확실하지 않다면 링크를 포함하지 마세요
+    5. 모든 정보는 2024년 말 ~ 2025년 최신 버전 기준
+    6. 학습자의 상세한 현재 수준을 고려하여 효율적인 커리큘럼 구성
     
     정확히 다음 JSON 형식으로만 응답하세요:
     {{
@@ -60,7 +61,7 @@ def generate_roadmap(topic, level, detailed_level, duration, model="gpt-4o-mini"
                 "week": 1,
                 "title": "주차 제목",
                 "topics": ["주제1", "주제2"],
-                "resources": ["리소스1", "리소스2"],
+                "resources": ["공식 문서 읽기", "YouTube 튜토리얼 시청", "실습 프로젝트 진행"],
                 "goals": "학습 목표",
                 "notes": "주의사항"
             }}
@@ -68,10 +69,11 @@ def generate_roadmap(topic, level, detailed_level, duration, model="gpt-4o-mini"
         "prerequisites": ["요구사항1", "요구사항2"],
         "final_goals": ["목표1", "목표2"],
         "version_info": "최신 버전 정보",
-        "last_updated": "{current_date}"
+        "last_updated": "{current_date}",
+        "search_keywords": ["검색키워드1", "검색키워드2"]
     }}
     
-    다른 설명 없이 오직 JSON만 응답하세요.
+    다른 설명 없이 오직 JSON만 응답하세요. 가짜 URL은 절대 만들지 마세요.
     """
     
     try:
@@ -158,22 +160,34 @@ def verify_resources(resources):
     
     return verified_resources
 
-def search_latest_docs(topic):
-    """최신 공식 문서 검색 (간단한 구글 검색)"""
-    search_query = f"{topic} official documentation site:github.com OR site:docs.unity3d.com OR site:learn.microsoft.com"
+def search_real_resources(topic, search_keywords):
+    """실제 존재하는 리소스를 검색해서 추가"""
+    real_resources = []
     
-    # 실제로는 Google Custom Search API나 다른 검색 API를 사용해야 함
-    # 여기서는 시뮬레이션
-    mock_results = [
-        {
-            "title": f"{topic} 공식 문서",
-            "url": f"https://docs.example.com/{topic.lower()}",
-            "snippet": f"{topic}의 최신 문서입니다.",
-            "last_updated": "2024-12"
-        }
+    # 기본 검색 키워드들
+    base_searches = [
+        f"{topic} official documentation",
+        f"{topic} tutorial 2024",
+        f"{topic} getting started guide",
+        f"learn {topic} beginner"
     ]
     
-    return mock_results
+    # 로드맵에서 제공된 검색 키워드 추가
+    if search_keywords:
+        base_searches.extend([f"{topic} {keyword}" for keyword in search_keywords])
+    
+    # 실제로는 웹 검색 API를 사용해야 하지만, 
+    # 현재는 일반적인 리소스 타입들을 제안
+    common_resources = {
+        "공식 문서": f"{topic} 공식 문서에서 기본 개념과 API 레퍼런스 학습",
+        "GitHub 저장소": f"{topic} 관련 오픈소스 프로젝트와 예제 코드 탐색",
+        "YouTube 채널": f"{topic} 전문가들의 튜토리얼 영상 시청",
+        "개발 블로그": f"{topic} 관련 기술 블로그와 아티클 읽기",
+        "온라인 강의": f"{topic} 온라인 강의 플랫폼에서 체계적 학습",
+        "커뮤니티": f"{topic} 개발자 커뮤니티에서 질문과 토론 참여"
+    }
+    
+    return common_resources
 
 # 메인 UI
 st.title("🗺️ AI 학습 로드맵 생성기")
@@ -383,15 +397,24 @@ if st.button("🚀 로드맵 생성", type="primary", use_container_width=True):
                     st.write("**🔗 학습 자료:**")
                     resources = week_data.get('resources', [])
                     
-                    if include_verification and resources:
-                        with st.spinner("리소스 검증 중..."):
-                            verified = verify_resources(resources)
-                        
-                        for resource_info in verified:
-                            st.write(f"• [{resource_info['url']}]({resource_info['url']}) {resource_info['status']}")
-                    else:
-                        for resource in resources:
-                            st.write(f"• {resource}")
+                    # 일반적인 리소스 설명으로 표시
+                    for resource in resources:
+                        st.write(f"• {resource}")
+                    
+                    # 실제 리소스 검색 제안
+                    if 'search_keywords' in roadmap_data and roadmap_data['search_keywords']:
+                        st.write("**🔍 추천 검색:**")
+                        for keyword in roadmap_data['search_keywords'][:3]:  # 상위 3개만
+                            search_query = f"{topic} {keyword}"
+                            google_search_url = f"https://www.google.com/search?q={search_query.replace(' ', '+')}"
+                            st.write(f"• [{keyword} 검색]({google_search_url})")
+                    
+                    # 일반적인 리소스 타입 제안
+                    with st.expander("💡 리소스 찾기 팁", expanded=False):
+                        st.write(f"**{topic} 학습을 위한 추천 리소스:**")
+                        suggested_resources = search_real_resources(topic, roadmap_data.get('search_keywords', []))
+                        for resource_type, description in suggested_resources.items():
+                            st.write(f"• **{resource_type}**: {description}")
         
         # 최종 목표
         if 'final_goals' in roadmap_data:
@@ -399,15 +422,31 @@ if st.button("🚀 로드맵 생성", type="primary", use_container_width=True):
             for goal in roadmap_data['final_goals']:
                 st.write(f"• {goal}")
         
-        # 최신 문서 검색 결과
+        # 실제 리소스 찾기 도구
         if search_latest:
-            st.subheader("🔍 관련 최신 문서")
-            with st.spinner("최신 문서를 검색하고 있습니다..."):
-                latest_docs = search_latest_docs(topic)
+            st.subheader("🔍 실제 리소스 찾기")
             
-            for doc in latest_docs:
-                st.write(f"📄 [{doc['title']}]({doc['url']}) (업데이트: {doc['last_updated']})")
-                st.write(f"   {doc['snippet']}")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write("**🎯 맞춤 검색:**")
+                if 'search_keywords' in roadmap_data:
+                    for keyword in roadmap_data['search_keywords']:
+                        search_url = f"https://www.google.com/search?q={topic}+{keyword}+2024+2025".replace(' ', '+')
+                        st.write(f"• ['{keyword}' 관련 최신 자료]({search_url})")
+            
+            with col2:
+                st.write("**📚 추천 검색 사이트:**")
+                search_sites = [
+                    ("GitHub", f"https://github.com/search?q={topic}"),
+                    ("Stack Overflow", f"https://stackoverflow.com/search?q={topic}"),
+                    ("YouTube", f"https://www.youtube.com/results?search_query={topic}+tutorial+2024"),
+                    ("Medium", f"https://medium.com/search?q={topic}")
+                ]
+                
+                for site_name, search_url in search_sites:
+                    st.write(f"• [{site_name}에서 검색]({search_url})")
+            
+            st.info("💡 **팁**: 위 링크들을 클릭해서 실제 최신 자료를 찾아보세요!")
 
 # 푸터
 st.markdown("---")

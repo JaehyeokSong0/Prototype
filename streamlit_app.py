@@ -344,7 +344,9 @@ def generate_full_app_pdf():
         st.success(f"✅ PDF가 생성되었습니다! '{filename}' 파일을 다운로드하세요.")
         
     except ImportError:
-        st.error("❌ reportlab 패키지가 설치되지 않았습니다. `pip install reportlab`을 실행하세요.")
+        st.error("❌ PDF 생성을 위해 reportlab 패키지를 설치해주세요.")
+        st.code("pip install reportlab")
+        st.info("💡 로컬에서 실행 중이라면 터미널에서 위 명령어를 실행하세요.\n📱 Streamlit Cloud에서 실행 중이라면 requirements.txt에 reportlab을 추가하고 재배포하세요.")
     except Exception as e:
         st.error(f"❌ PDF 생성 중 오류 발생: {str(e)}")
 

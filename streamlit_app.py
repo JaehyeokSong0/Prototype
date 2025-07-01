@@ -1,4 +1,14 @@
-import streamlit as st
+# Dev 모드에서만 PDF 다운로드 옵션 표시
+        if st.session_state.current_dev_mode:
+            st.markdown("---")
+            st.subheader("📄 앱 상태 내보내기")
+            if st.button("📥 전체 앱 PDF 다운로드"):
+                generate_full_app_pdf()
+            
+            if st.session_state.generated_roadmap:
+                st.info("💡 현재 화면의 모든 설정, 입력값, 생성된 로드맵을 포함한 완전한 PDF를 생성합니다.")
+            else:
+                st.warning("⚠️ 로드맵을 먼저 생성하면 더 완전한 PDF를 받을 수 있습니다.")import streamlit as st
 from openai import OpenAI
 import requests
 from bs4 import BeautifulSoup
@@ -19,6 +29,30 @@ if 'openai_api_key' not in st.session_state:
     st.session_state.openai_api_key = ""
 if 'openai_client' not in st.session_state:
     st.session_state.openai_client = None
+
+# UI 상태 저장을 위한 session state 초기화
+if 'current_topic' not in st.session_state:
+    st.session_state.current_topic = ""
+if 'current_level' not in st.session_state:
+    st.session_state.current_level = "기초 지식 있음"
+if 'current_detailed_level' not in st.session_state:
+    st.session_state.current_detailed_level = ""
+if 'current_duration' not in st.session_state:
+    st.session_state.current_duration = "2개월"
+if 'current_dev_mode' not in st.session_state:
+    st.session_state.current_dev_mode = False
+if 'current_model' not in st.session_state:
+    st.session_state.current_model = "gpt-4o-mini"
+if 'current_temperature' not in st.session_state:
+    st.session_state.current_temperature = 0.7
+if 'current_max_tokens' not in st.session_state:
+    st.session_state.current_max_tokens = 2000
+if 'current_include_verification' not in st.session_state:
+    st.session_state.current_include_verification = True
+if 'current_search_latest' not in st.session_state:
+    st.session_state.current_search_latest = True
+if 'generated_roadmap' not in st.session_state:
+    st.session_state.generated_roadmap = None
 
 def init_openai():
     if st.session_state.openai_api_key:
@@ -168,180 +202,334 @@ def verify_resources(resources):
     return verified_resources
 
 def generate_full_app_pdf():
-    """전체 앱 상태를 PDF로 생성"""
+    """현재 앱의 전체 화면 상태를 PDF로 생성"""
     try:
-        from reportlab.lib.pagesizes import A4, letter
+        from reportlab.lib.pagesizes import letter
         from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import inch
         from reportlab.lib import colors
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
         from io import BytesIO
+        
+        # 한글 폰트 설정
+        korean_font = 'Helvetica'  # 기본값
+        try:
+            import platform
+            system = platform.system()
+            
+            if system == "Windows":
+                try:
+                    pdfmetrics.registerFont(TTFont('Korean', "C:/Windows/Fonts/malgun.ttf"))
+                    korean_font = 'Korean'
+                except:
+                    pass
+        except:
+            pass
         
         # PDF 버퍼 생성
         buffer = BytesIO()
-        doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch)
+        doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
         styles = getSampleStyleSheet()
+        
+        # 한글 폰트 적용
+        if korean_font == 'Korean':
+            for style_name in ['Normal', 'Heading1', 'Heading2', 'Heading3', 'Heading4']:
+                styles[style_name].fontName = korean_font
+        
         story = []
         
-        # 제목
+        # === 제목 ===
         title_style = ParagraphStyle(
             'CustomTitle',
             parent=styles['Heading1'],
-            fontSize=20,
+            fontSize=24,
             spaceAfter=30,
-            textColor=colors.darkblue
+            textColor=colors.darkblue,
+            fontName=korean_font,
+            alignment=1  # 중앙 정렬
         )
-        story.append(Paragraph("🗺️ AI 학습 로드맵 생성기 - 전체 앱 상태", title_style))
+        
+        if korean_font == 'Korean':
+            story.append(Paragraph("AI 학습 로드맵 생성기", title_style))
+            story.append(Paragraph("전체 앱 상태 스냅샷", styles['Heading2']))
+        else:
+            story.append(Paragraph("AI Learning Roadmap Generator", title_style))
+            story.append(Paragraph("Full App State Snapshot", styles['Heading2']))
+        
         story.append(Spacer(1, 20))
         
-        # 사이드바 설정 정보
-        story.append(Paragraph("⚙️ 설정 정보", styles['Heading2']))
+        # === 생성 정보 ===
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        if korean_font == 'Korean':
+            story.append(Paragraph(f"생성 일시: {current_time}", styles['Normal']))
+        else:
+            story.append(Paragraph(f"Generated: {current_time}", styles['Normal']))
+        story.append(Spacer(1, 20))
         
-        settings_data = [
-            ["설정 항목", "값"],
-            ["개발자 모드", "활성화" if dev_mode else "비활성화"],
-            ["API 키", "설정됨" if st.session_state.openai_api_key else "없음"],
-        ]
+        # === 사이드바 설정 정보 ===
+        if korean_font == 'Korean':
+            story.append(Paragraph("⚙️ 사이드바 설정", styles['Heading2']))
+        else:
+            story.append(Paragraph("⚙️ Sidebar Settings", styles['Heading2']))
         
-        if dev_mode:
-            settings_data.extend([
-                ["선택된 모델", model_choice],
-                ["Temperature", str(temperature)],
-                ["Max Tokens", str(max_tokens)]
-            ])
+        # 설정 테이블 데이터
+        if korean_font == 'Korean':
+            settings_data = [
+                ["설정 항목", "값"],
+                ["API 키", "설정됨" if st.session_state.openai_api_key else "미설정"],
+                ["개발자 모드", "활성화" if st.session_state.current_dev_mode else "비활성화"],
+            ]
+            
+            if st.session_state.current_dev_mode:
+                settings_data.extend([
+                    ["선택된 모델", st.session_state.current_model],
+                    ["Temperature", str(st.session_state.current_temperature)],
+                    ["Max Tokens", str(st.session_state.current_max_tokens)]
+                ])
+        else:
+            settings_data = [
+                ["Setting", "Value"],
+                ["API Key", "Set" if st.session_state.openai_api_key else "Not Set"],
+                ["Dev Mode", "Enabled" if st.session_state.current_dev_mode else "Disabled"],
+            ]
+            
+            if st.session_state.current_dev_mode:
+                settings_data.extend([
+                    ["Selected Model", st.session_state.current_model],
+                    ["Temperature", str(st.session_state.current_temperature)],
+                    ["Max Tokens", str(st.session_state.current_max_tokens)]
+                ])
         
-        settings_table = Table(settings_data)
+        settings_table = Table(settings_data, colWidths=[2.5*inch, 3*inch])
         settings_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 0), (-1, -1), korean_font),
             ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ('BACKGROUND', (0, 1), (-1, -1), colors.lightgrey),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP')
         ]))
         story.append(settings_table)
         story.append(Spacer(1, 20))
         
-        # 입력 정보
-        story.append(Paragraph("📚 입력 정보", styles['Heading2']))
+        # === 메인 입력 정보 ===
+        if korean_font == 'Korean':
+            story.append(Paragraph("📚 학습 정보 입력", styles['Heading2']))
+        else:
+            story.append(Paragraph("📚 Learning Information Input", styles['Heading2']))
         
-        input_data = [
-            ["입력 항목", "값"],
-            ["학습 주제", topic if 'topic' in locals() and topic else "없음"],
-            ["현재 수준", level if 'level' in locals() and level else "없음"],
-            ["상세 설명", (detailed_level[:100] + "...") if 'detailed_level' in locals() and detailed_level and len(detailed_level) > 100 else (detailed_level if 'detailed_level' in locals() else "없음")],
-            ["학습 기간", duration if 'duration' in locals() and duration else "없음"],
-            ["리소스 검증", "포함" if include_verification else "제외"],
-            ["최신 문서 검색", "포함" if search_latest else "제외"]
-        ]
+        # 입력 테이블 데이터
+        if korean_font == 'Korean':
+            input_data = [
+                ["입력 항목", "입력 값"],
+                ["학습 주제", st.session_state.current_topic or "입력되지 않음"],
+                ["현재 수준", st.session_state.current_level],
+                ["학습 기간", st.session_state.current_duration],
+                ["리소스 검증", "포함" if st.session_state.current_include_verification else "제외"],
+                ["최신 문서 검색", "포함" if st.session_state.current_search_latest else "제외"]
+            ]
+            
+            # 상세 설명이 있으면 추가
+            if st.session_state.current_detailed_level:
+                detailed_text = st.session_state.current_detailed_level
+                if len(detailed_text) > 150:
+                    detailed_text = detailed_text[:150] + "..."
+                input_data.insert(-2, ["상세 설명", detailed_text])
+        else:
+            input_data = [
+                ["Input Item", "Value"],
+                ["Learning Topic", st.session_state.current_topic or "Not entered"],
+                ["Current Level", st.session_state.current_level],
+                ["Learning Duration", st.session_state.current_duration],
+                ["Resource Verification", "Included" if st.session_state.current_include_verification else "Excluded"],
+                ["Latest Docs Search", "Included" if st.session_state.current_search_latest else "Excluded"]
+            ]
+            
+            if st.session_state.current_detailed_level:
+                detailed_text = st.session_state.current_detailed_level
+                if len(detailed_text) > 150:
+                    detailed_text = detailed_text[:150] + "..."
+                input_data.insert(-2, ["Detailed Description", detailed_text])
         
-        input_table = Table(input_data)
+        input_table = Table(input_data, colWidths=[2.5*inch, 3*inch])
         input_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.darkgreen),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTNAME', (0, 0), (-1, -1), korean_font),
             ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+            ('BACKGROUND', (0, 1), (-1, -1), colors.lightgreen),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'TOP')
         ]))
         story.append(input_table)
         story.append(Spacer(1, 20))
         
-        # 생성된 로드맵 (있는 경우)
-        if 'roadmap_data' in locals() and roadmap_data:
-            story.append(Paragraph("📋 생성된 로드맵", styles['Heading2']))
+        # === 생성된 로드맵 ===
+        if st.session_state.generated_roadmap:
+            roadmap_data = st.session_state.generated_roadmap
             
-            # 버전 정보
+            if korean_font == 'Korean':
+                story.append(Paragraph("📋 생성된 학습 로드맵", styles['Heading2']))
+            else:
+                story.append(Paragraph("📋 Generated Learning Roadmap", styles['Heading2']))
+            
+            # 로드맵 메타 정보
             if 'version_info' in roadmap_data:
-                story.append(Paragraph(f"<b>최신 버전 기준:</b> {roadmap_data.get('version_info', '')}", styles['Normal']))
-                story.append(Paragraph(f"<b>생성일:</b> {roadmap_data.get('last_updated', '')}", styles['Normal']))
-                if dev_mode:
-                    story.append(Paragraph(f"<b>사용 모델:</b> {model_choice}", styles['Normal']))
+                if korean_font == 'Korean':
+                    story.append(Paragraph(f"<b>최신 버전 기준:</b> {roadmap_data.get('version_info', '')}", styles['Normal']))
+                    story.append(Paragraph(f"<b>생성 일자:</b> {roadmap_data.get('last_updated', '')}", styles['Normal']))
+                    if st.session_state.current_dev_mode:
+                        story.append(Paragraph(f"<b>사용 모델:</b> {st.session_state.current_model}", styles['Normal']))
+                else:
+                    story.append(Paragraph(f"<b>Version Info:</b> {roadmap_data.get('version_info', '')}", styles['Normal']))
+                    story.append(Paragraph(f"<b>Generated:</b> {roadmap_data.get('last_updated', '')}", styles['Normal']))
+                    if st.session_state.current_dev_mode:
+                        story.append(Paragraph(f"<b>Model Used:</b> {st.session_state.current_model}", styles['Normal']))
                 story.append(Spacer(1, 10))
             
             # 사전 요구사항
-            if 'prerequisites' in roadmap_data:
-                story.append(Paragraph("📌 사전 요구사항", styles['Heading3']))
+            if 'prerequisites' in roadmap_data and roadmap_data['prerequisites']:
+                if korean_font == 'Korean':
+                    story.append(Paragraph("📌 사전 요구사항", styles['Heading3']))
+                else:
+                    story.append(Paragraph("📌 Prerequisites", styles['Heading3']))
+                
                 for prereq in roadmap_data['prerequisites']:
                     story.append(Paragraph(f"• {prereq}", styles['Normal']))
                 story.append(Spacer(1, 10))
             
             # 주차별 로드맵
-            story.append(Paragraph("📅 주차별 학습 계획", styles['Heading3']))
-            
-            for week_data in roadmap_data.get('roadmap', []):
-                # 주차 제목
-                week_title = f"📖 {week_data['week']}주차: {week_data['title']}"
-                story.append(Paragraph(week_title, styles['Heading4']))
+            if 'roadmap' in roadmap_data:
+                if korean_font == 'Korean':
+                    story.append(Paragraph("📅 주차별 학습 계획", styles['Heading3']))
+                else:
+                    story.append(Paragraph("📅 Weekly Learning Plan", styles['Heading3']))
                 
-                # 학습 주제
-                story.append(Paragraph("<b>📚 학습 주제:</b>", styles['Normal']))
-                for topic_item in week_data.get('topics', []):
-                    story.append(Paragraph(f"• {topic_item}", styles['Normal']))
-                
-                # 목표
-                story.append(Paragraph(f"<b>🎯 목표:</b> {week_data.get('goals', '')}", styles['Normal']))
-                
-                # 실습 과제
-                if 'practical_tasks' in week_data:
-                    story.append(Paragraph("<b>🛠️ 실습 과제:</b>", styles['Normal']))
-                    for task in week_data['practical_tasks']:
-                        story.append(Paragraph(f"• {task}", styles['Normal']))
-                
-                # 완성 목표
-                if 'deliverables' in week_data:
-                    story.append(Paragraph("<b>📦 완성 목표:</b>", styles['Normal']))
-                    for deliverable in week_data['deliverables']:
-                        story.append(Paragraph(f"✅ {deliverable}", styles['Normal']))
-                
-                # 학습 자료
-                story.append(Paragraph("<b>🔗 학습 자료:</b>", styles['Normal']))
-                for resource in week_data.get('resources', []):
-                    story.append(Paragraph(f"• {resource}", styles['Normal']))
-                
-                # 주차별 검색 키워드
-                if 'week_specific_keywords' in week_data:
-                    story.append(Paragraph("<b>🔍 이번 주 특화 검색:</b>", styles['Normal']))
-                    for keyword in week_data['week_specific_keywords']:
-                        story.append(Paragraph(f"• {keyword}", styles['Normal']))
-                
-                story.append(Spacer(1, 15))
+                for week_data in roadmap_data['roadmap']:
+                    # 주차 제목
+                    if korean_font == 'Korean':
+                        week_title = f"📖 {week_data.get('week', 'X')}주차: {week_data.get('title', '')}"
+                    else:
+                        week_title = f"📖 Week {week_data.get('week', 'X')}: {week_data.get('title', '')}"
+                    
+                    story.append(Paragraph(week_title, styles['Heading4']))
+                    
+                    # 학습 주제
+                    if 'topics' in week_data:
+                        if korean_font == 'Korean':
+                            story.append(Paragraph("<b>📚 학습 주제:</b>", styles['Normal']))
+                        else:
+                            story.append(Paragraph("<b>📚 Learning Topics:</b>", styles['Normal']))
+                        
+                        for topic_item in week_data['topics']:
+                            story.append(Paragraph(f"  • {topic_item}", styles['Normal']))
+                    
+                    # 목표
+                    if 'goals' in week_data:
+                        if korean_font == 'Korean':
+                            story.append(Paragraph(f"<b>🎯 목표:</b> {week_data['goals']}", styles['Normal']))
+                        else:
+                            story.append(Paragraph(f"<b>🎯 Goals:</b> {week_data['goals']}", styles['Normal']))
+                    
+                    # 실습 과제
+                    if 'practical_tasks' in week_data:
+                        if korean_font == 'Korean':
+                            story.append(Paragraph("<b>🛠️ 실습 과제:</b>", styles['Normal']))
+                        else:
+                            story.append(Paragraph("<b>🛠️ Practical Tasks:</b>", styles['Normal']))
+                        
+                        for task in week_data['practical_tasks']:
+                            story.append(Paragraph(f"  • {task}", styles['Normal']))
+                    
+                    # 완성 목표
+                    if 'deliverables' in week_data:
+                        if korean_font == 'Korean':
+                            story.append(Paragraph("<b>📦 완성 목표:</b>", styles['Normal']))
+                        else:
+                            story.append(Paragraph("<b>📦 Deliverables:</b>", styles['Normal']))
+                        
+                        for deliverable in week_data['deliverables']:
+                            story.append(Paragraph(f"  ✅ {deliverable}", styles['Normal']))
+                    
+                    # 학습 자료
+                    if 'resources' in week_data:
+                        if korean_font == 'Korean':
+                            story.append(Paragraph("<b>🔗 학습 자료:</b>", styles['Normal']))
+                        else:
+                            story.append(Paragraph("<b>🔗 Learning Resources:</b>", styles['Normal']))
+                        
+                        for resource in week_data['resources']:
+                            story.append(Paragraph(f"  • {resource}", styles['Normal']))
+                    
+                    # 주차별 검색 키워드
+                    if 'week_specific_keywords' in week_data:
+                        if korean_font == 'Korean':
+                            story.append(Paragraph("<b>🔍 이번 주 특화 검색:</b>", styles['Normal']))
+                        else:
+                            story.append(Paragraph("<b>🔍 Week-specific Search:</b>", styles['Normal']))
+                        
+                        for keyword in week_data['week_specific_keywords']:
+                            story.append(Paragraph(f"  • {keyword}", styles['Normal']))
+                    
+                    story.append(Spacer(1, 15))
             
             # 최종 목표
-            if 'final_goals' in roadmap_data:
-                story.append(Paragraph("🏆 최종 완성 목표", styles['Heading3']))
+            if 'final_goals' in roadmap_data and roadmap_data['final_goals']:
+                if korean_font == 'Korean':
+                    story.append(Paragraph("🏆 최종 완성 목표", styles['Heading3']))
+                else:
+                    story.append(Paragraph("🏆 Final Goals", styles['Heading3']))
+                
                 for goal in roadmap_data['final_goals']:
                     story.append(Paragraph(f"• {goal}", styles['Normal']))
                 story.append(Spacer(1, 10))
             
             # 난이도 진행
             if 'difficulty_progression' in roadmap_data:
-                story.append(Paragraph("📈 난이도 진행", styles['Heading3']))
+                if korean_font == 'Korean':
+                    story.append(Paragraph("📈 난이도 진행", styles['Heading3']))
+                else:
+                    story.append(Paragraph("📈 Difficulty Progression", styles['Heading3']))
+                
                 story.append(Paragraph(roadmap_data['difficulty_progression'], styles['Normal']))
         
         else:
-            story.append(Paragraph("📋 로드맵이 아직 생성되지 않았습니다.", styles['Normal']))
+            if korean_font == 'Korean':
+                story.append(Paragraph("📋 로드맵이 아직 생성되지 않았습니다.", styles['Heading2']))
+                story.append(Paragraph("로드맵을 생성한 후 PDF를 다시 다운로드하세요.", styles['Normal']))
+            else:
+                story.append(Paragraph("📋 Roadmap has not been generated yet.", styles['Heading2']))
+                story.append(Paragraph("Please generate a roadmap first, then download the PDF again.", styles['Normal']))
         
         # PDF 생성
         doc.build(story)
         buffer.seek(0)
         
         # 다운로드 제공
-        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"learning_roadmap_app_{current_time}.pdf"
+        current_time_filename = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"learning_roadmap_full_app_{current_time_filename}.pdf"
         
         st.download_button(
             label="📥 PDF 다운로드",
             data=buffer.getvalue(),
             file_name=filename,
-            mime="application/pdf"
+            mime="application/pdf",
+            key="pdf_download_btn"
         )
         
-        st.success(f"✅ PDF가 생성되었습니다! '{filename}' 파일을 다운로드하세요.")
+        if korean_font == 'Korean':
+            st.success(f"✅ 전체 앱 상태가 PDF로 생성되었습니다! '{filename}' 파일을 다운로드하세요.")
+        else:
+            st.success(f"✅ Full app state PDF generated! Download '{filename}' file.")
         
     except ImportError:
         st.error("❌ PDF 생성을 위해 reportlab 패키지를 설치해주세요.")
@@ -349,6 +537,11 @@ def generate_full_app_pdf():
         st.info("💡 로컬에서 실행 중이라면 터미널에서 위 명령어를 실행하세요.\n📱 Streamlit Cloud에서 실행 중이라면 requirements.txt에 reportlab을 추가하고 재배포하세요.")
     except Exception as e:
         st.error(f"❌ PDF 생성 중 오류 발생: {str(e)}")
+        # 디버깅을 위한 상세 정보
+        if st.session_state.current_dev_mode:
+            st.error(f"상세 오류: {type(e).__name__}: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
 
 def search_real_resources(topic, search_keywords):
     """실제 존재하는 리소스를 검색해서 추가"""
@@ -390,9 +583,10 @@ with st.sidebar:
     # Dev 모드 토글
     dev_mode = st.checkbox(
         "🔧 개발자 모드",
-        value=False,
+        value=st.session_state.current_dev_mode,
         help="고급 설정 및 다양한 모델 선택 가능"
     )
+    st.session_state.current_dev_mode = dev_mode
     
     api_key_input = st.text_input(
         "OpenAI API Key", 
@@ -418,24 +612,27 @@ with st.sidebar:
             index=0,
             help="다양한 OpenAI 모델을 테스트할 수 있습니다"
         )
+        st.session_state.current_model = model_choice
         
         temperature = st.slider(
             "Temperature",
             min_value=0.0,
             max_value=2.0,
-            value=0.7,
+            value=st.session_state.current_temperature,
             step=0.1,
             help="창의성 조절 (0: 일관성, 2: 창의성)"
         )
+        st.session_state.current_temperature = temperature
         
         max_tokens = st.number_input(
             "Max Tokens",
             min_value=500,
             max_value=4000,
-            value=2000,
+            value=st.session_state.current_max_tokens,
             step=100,
             help="응답 최대 길이"
         )
+        st.session_state.current_max_tokens = max_tokens
         
         st.info("💡 **모델 특징:**\n"
                 "- **gpt-4o**: 최신 고성능 모델\n"
@@ -444,10 +641,10 @@ with st.sidebar:
                 "- **gpt-4**: 고품질 추론\n"
                 "- **gpt-3.5-turbo**: 빠르고 경제적")
     else:
-        # 일반 모드에서는 기본값 사용
-        model_choice = "gpt-4o-mini"
-        temperature = 0.7
-        max_tokens = 2000
+        # 일반 모드에서는 session state 기본값 사용
+        model_choice = st.session_state.current_model
+        temperature = st.session_state.current_temperature
+        max_tokens = st.session_state.current_max_tokens
     
     if api_key_input != st.session_state.openai_api_key:
         st.session_state.openai_api_key = api_key_input
@@ -466,51 +663,59 @@ with col1:
     
     topic = st.text_input(
         "학습하고 싶은 주제",
+        value=st.session_state.current_topic,
         placeholder="예: Unity ML-Agents, React Native, Docker",
         help="구체적인 기술이나 라이브러리명을 입력하세요"
     )
+    st.session_state.current_topic = topic
     
     level = st.selectbox(
         "현재 수준 (기본 선택)",
         ["완전 초보", "기초 지식 있음", "중급", "고급"],
-        index=1
+        index=["완전 초보", "기초 지식 있음", "중급", "고급"].index(st.session_state.current_level)
     )
+    st.session_state.current_level = level
     
     detailed_level = st.text_area(
         "현재 수준 상세 설명 (선택사항)",
+        value=st.session_state.current_detailed_level,
         placeholder="예: Unity 기본 사용법은 알고 있고, C# 스크립팅도 할 수 있지만 ML-Agents는 처음입니다. 머신러닝 개념은 대학교에서 배웠지만 실제 구현 경험은 없습니다.",
         help="어떤 기술들을 이미 알고 있는지, 관련 경험이 있는지 자세히 설명해주세요. 더 정확한 로드맵을 생성할 수 있습니다.",
         height=100
     )
+    st.session_state.current_detailed_level = detailed_level
     
     duration = st.selectbox(
         "학습 기간",
         ["2주", "1개월", "2개월", "3개월", "6개월"],
-        index=2
+        index=["2주", "1개월", "2개월", "3개월", "6개월"].index(st.session_state.current_duration)
     )
+    st.session_state.current_duration = duration
 
 with col2:
     st.header("🎯 추가 옵션")
     
     include_verification = st.checkbox(
         "리소스 검증 포함",
-        value=True,
+        value=st.session_state.current_include_verification,
         help="생성된 로드맵의 링크들을 실시간으로 검증합니다"
     )
+    st.session_state.current_include_verification = include_verification
     
     search_latest = st.checkbox(
         "최신 문서 검색",
-        value=True,
+        value=st.session_state.current_search_latest,
         help="주제 관련 최신 공식 문서를 검색합니다"
     )
+    st.session_state.current_search_latest = search_latest
     
     # Dev 모드일 때 추가 정보 표시
-    if dev_mode:
+    if st.session_state.current_dev_mode:
         st.markdown("---")
         st.subheader("🔍 Dev 정보")
-        st.write(f"**선택된 모델:** {model_choice}")
-        st.write(f"**Temperature:** {temperature}")
-        st.write(f"**Max Tokens:** {max_tokens}")
+        st.write(f"**선택된 모델:** {st.session_state.current_model}")
+        st.write(f"**Temperature:** {st.session_state.current_temperature}")
+        st.write(f"**Max Tokens:** {st.session_state.current_max_tokens}")
         
         if st.button("🧪 모델 테스트"):
             if not init_openai():
@@ -519,11 +724,11 @@ with col2:
                 with st.spinner("모델 테스트 중..."):
                     try:
                         test_response = st.session_state.openai_client.chat.completions.create(
-                            model=model_choice,
+                            model=st.session_state.current_model,
                             messages=[{"role": "user", "content": "Hello, this is a test."}],
                             max_tokens=50
                         )
-                        st.success(f"✅ {model_choice} 모델이 정상 작동합니다!")
+                        st.success(f"✅ {st.session_state.current_model} 모델이 정상 작동합니다!")
                         st.write(f"테스트 응답: {test_response.choices[0].message.content}")
                     except Exception as e:
                         st.error(f"❌ 모델 테스트 실패: {str(e)}")
@@ -652,6 +857,8 @@ if st.button("🚀 로드맵 생성", type="primary", use_container_width=True):
         roadmap_data = generate_roadmap(topic, level, detailed_level, duration, model_choice, temperature, max_tokens)
     
     if roadmap_data:
+        # 생성된 로드맵을 session state에 저장
+        st.session_state.generated_roadmap = roadmap_data
         st.success("✅ 로드맵이 생성되었습니다!")
         
         # 로드맵 표시
@@ -663,8 +870,8 @@ if st.button("🚀 로드맵 생성", type="primary", use_container_width=True):
             if 'version_info' in roadmap_data:
                 st.info(f"📅 **최신 버전 기준**: {roadmap_data.get('version_info', '')} (생성일: {roadmap_data.get('last_updated', '')})")
         with col2:
-            if dev_mode:
-                st.info(f"🤖 **사용 모델**: {model_choice}")
+            if st.session_state.current_dev_mode:
+                st.info(f"🤖 **사용 모델**: {st.session_state.current_model}")
 
         
         # 사전 요구사항

@@ -167,6 +167,187 @@ def verify_resources(resources):
     
     return verified_resources
 
+def generate_full_app_pdf():
+    """전체 앱 상태를 PDF로 생성"""
+    try:
+        from reportlab.lib.pagesizes import A4, letter
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.lib import colors
+        from io import BytesIO
+        
+        # PDF 버퍼 생성
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch)
+        styles = getSampleStyleSheet()
+        story = []
+        
+        # 제목
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=20,
+            spaceAfter=30,
+            textColor=colors.darkblue
+        )
+        story.append(Paragraph("🗺️ AI 학습 로드맵 생성기 - 전체 앱 상태", title_style))
+        story.append(Spacer(1, 20))
+        
+        # 사이드바 설정 정보
+        story.append(Paragraph("⚙️ 설정 정보", styles['Heading2']))
+        
+        settings_data = [
+            ["설정 항목", "값"],
+            ["개발자 모드", "활성화" if dev_mode else "비활성화"],
+            ["API 키", "설정됨" if st.session_state.openai_api_key else "없음"],
+        ]
+        
+        if dev_mode:
+            settings_data.extend([
+                ["선택된 모델", model_choice],
+                ["Temperature", str(temperature)],
+                ["Max Tokens", str(max_tokens)]
+            ])
+        
+        settings_table = Table(settings_data)
+        settings_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        story.append(settings_table)
+        story.append(Spacer(1, 20))
+        
+        # 입력 정보
+        story.append(Paragraph("📚 입력 정보", styles['Heading2']))
+        
+        input_data = [
+            ["입력 항목", "값"],
+            ["학습 주제", topic if 'topic' in locals() and topic else "없음"],
+            ["현재 수준", level if 'level' in locals() and level else "없음"],
+            ["상세 설명", (detailed_level[:100] + "...") if 'detailed_level' in locals() and detailed_level and len(detailed_level) > 100 else (detailed_level if 'detailed_level' in locals() else "없음")],
+            ["학습 기간", duration if 'duration' in locals() and duration else "없음"],
+            ["리소스 검증", "포함" if include_verification else "제외"],
+            ["최신 문서 검색", "포함" if search_latest else "제외"]
+        ]
+        
+        input_table = Table(input_data)
+        input_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+        story.append(input_table)
+        story.append(Spacer(1, 20))
+        
+        # 생성된 로드맵 (있는 경우)
+        if 'roadmap_data' in locals() and roadmap_data:
+            story.append(Paragraph("📋 생성된 로드맵", styles['Heading2']))
+            
+            # 버전 정보
+            if 'version_info' in roadmap_data:
+                story.append(Paragraph(f"<b>최신 버전 기준:</b> {roadmap_data.get('version_info', '')}", styles['Normal']))
+                story.append(Paragraph(f"<b>생성일:</b> {roadmap_data.get('last_updated', '')}", styles['Normal']))
+                if dev_mode:
+                    story.append(Paragraph(f"<b>사용 모델:</b> {model_choice}", styles['Normal']))
+                story.append(Spacer(1, 10))
+            
+            # 사전 요구사항
+            if 'prerequisites' in roadmap_data:
+                story.append(Paragraph("📌 사전 요구사항", styles['Heading3']))
+                for prereq in roadmap_data['prerequisites']:
+                    story.append(Paragraph(f"• {prereq}", styles['Normal']))
+                story.append(Spacer(1, 10))
+            
+            # 주차별 로드맵
+            story.append(Paragraph("📅 주차별 학습 계획", styles['Heading3']))
+            
+            for week_data in roadmap_data.get('roadmap', []):
+                # 주차 제목
+                week_title = f"📖 {week_data['week']}주차: {week_data['title']}"
+                story.append(Paragraph(week_title, styles['Heading4']))
+                
+                # 학습 주제
+                story.append(Paragraph("<b>📚 학습 주제:</b>", styles['Normal']))
+                for topic_item in week_data.get('topics', []):
+                    story.append(Paragraph(f"• {topic_item}", styles['Normal']))
+                
+                # 목표
+                story.append(Paragraph(f"<b>🎯 목표:</b> {week_data.get('goals', '')}", styles['Normal']))
+                
+                # 실습 과제
+                if 'practical_tasks' in week_data:
+                    story.append(Paragraph("<b>🛠️ 실습 과제:</b>", styles['Normal']))
+                    for task in week_data['practical_tasks']:
+                        story.append(Paragraph(f"• {task}", styles['Normal']))
+                
+                # 완성 목표
+                if 'deliverables' in week_data:
+                    story.append(Paragraph("<b>📦 완성 목표:</b>", styles['Normal']))
+                    for deliverable in week_data['deliverables']:
+                        story.append(Paragraph(f"✅ {deliverable}", styles['Normal']))
+                
+                # 학습 자료
+                story.append(Paragraph("<b>🔗 학습 자료:</b>", styles['Normal']))
+                for resource in week_data.get('resources', []):
+                    story.append(Paragraph(f"• {resource}", styles['Normal']))
+                
+                # 주차별 검색 키워드
+                if 'week_specific_keywords' in week_data:
+                    story.append(Paragraph("<b>🔍 이번 주 특화 검색:</b>", styles['Normal']))
+                    for keyword in week_data['week_specific_keywords']:
+                        story.append(Paragraph(f"• {keyword}", styles['Normal']))
+                
+                story.append(Spacer(1, 15))
+            
+            # 최종 목표
+            if 'final_goals' in roadmap_data:
+                story.append(Paragraph("🏆 최종 완성 목표", styles['Heading3']))
+                for goal in roadmap_data['final_goals']:
+                    story.append(Paragraph(f"• {goal}", styles['Normal']))
+                story.append(Spacer(1, 10))
+            
+            # 난이도 진행
+            if 'difficulty_progression' in roadmap_data:
+                story.append(Paragraph("📈 난이도 진행", styles['Heading3']))
+                story.append(Paragraph(roadmap_data['difficulty_progression'], styles['Normal']))
+        
+        else:
+            story.append(Paragraph("📋 로드맵이 아직 생성되지 않았습니다.", styles['Normal']))
+        
+        # PDF 생성
+        doc.build(story)
+        buffer.seek(0)
+        
+        # 다운로드 제공
+        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"learning_roadmap_app_{current_time}.pdf"
+        
+        st.download_button(
+            label="📥 PDF 다운로드",
+            data=buffer.getvalue(),
+            file_name=filename,
+            mime="application/pdf"
+        )
+        
+        st.success(f"✅ PDF가 생성되었습니다! '{filename}' 파일을 다운로드하세요.")
+        
+    except ImportError:
+        st.error("❌ reportlab 패키지가 설치되지 않았습니다. `pip install reportlab`을 실행하세요.")
+    except Exception as e:
+        st.error(f"❌ PDF 생성 중 오류 발생: {str(e)}")
+
 def search_real_resources(topic, search_keywords):
     """실제 존재하는 리소스를 검색해서 추가"""
     real_resources = []
@@ -344,6 +525,10 @@ with col2:
                         st.write(f"테스트 응답: {test_response.choices[0].message.content}")
                     except Exception as e:
                         st.error(f"❌ 모델 테스트 실패: {str(e)}")
+        
+        st.markdown("---")
+        if st.button("📄 전체 앱 PDF 다운로드"):
+            generate_full_app_pdf()
         
         st.markdown("---")
         st.subheader("📸 전체 화면 캡처")

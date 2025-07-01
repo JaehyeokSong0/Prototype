@@ -26,7 +26,7 @@ def init_openai():
         return True
     return False
 
-def generate_roadmap(topic, level, detailed_level, duration):
+def generate_roadmap(topic, level, detailed_level, duration, model="gpt-4o-mini", temperature=0.7, max_tokens=2000):
     """AI를 사용해 기본 로드맵 생성"""
     
     # 현재 날짜 정보
@@ -38,7 +38,7 @@ def generate_roadmap(topic, level, detailed_level, duration):
         level_info += f"\n상세 설명: {detailed_level}"
     
     prompt = f"""
-    **중요: 반드시 {current_date} 기준 최신 정보만 사용하세요. 구버전이나 deprecated된 내용은 절대 포함하지 마세요.**
+    **중요: 반드시 유효한 JSON 형식으로만 응답하세요. {current_date} 기준 최신 정보만 사용하세요.**
     
     학습 주제: {topic}
     {level_info}
@@ -47,32 +47,31 @@ def generate_roadmap(topic, level, detailed_level, duration):
     위 정보를 바탕으로 **{current_date} 현재 최신 버전 기준**으로 체계적인 학습 로드맵을 생성해주세요.
     
     **필수 요구사항:**
-    1. 모든 리소스와 API는 2024년 말 ~ 2025년 최신 버전 기준으로 작성
-    2. Deprecated된 기능이나 구버전 문서는 절대 포함 금지
-    3. 공식 문서 링크는 반드시 현재 활성화된 최신 버전 링크만 사용
-    4. 버전 정보를 명시할 때는 최신 안정 버전 기준으로 작성
-    5. 학습자의 상세한 현재 수준을 고려하여 중복되지 않는 효율적인 커리큘럼 구성
+    1. 반드시 유효한 JSON 형식으로만 응답
+    2. 문자열에는 반드시 이스케이프 처리된 따옴표 사용
+    3. 모든 리소스와 API는 2024년 말 ~ 2025년 최신 버전 기준
+    4. 공식 문서 링크는 현재 활성화된 최신 버전만 사용
+    5. 학습자의 상세한 현재 수준을 고려하여 효율적인 커리큘럼 구성
     
-    다음 형식으로 응답해주세요:
+    정확히 다음 JSON 형식으로만 응답하세요:
     {{
         "roadmap": [
             {{
                 "week": 1,
-                "title": "기초 개념 학습",
-                "topics": ["주제1", "주제2", "주제3"],
-                "resources": ["최신 공식 문서 링크", "2024-2025 최신 튜토리얼"],
-                "goals": "이번 주 학습 목표",
-                "notes": "최신 버전에서 변경된 사항이나 주의점"
-            }},
-            ...
+                "title": "주차 제목",
+                "topics": ["주제1", "주제2"],
+                "resources": ["리소스1", "리소스2"],
+                "goals": "학습 목표",
+                "notes": "주의사항"
+            }}
         ],
-        "prerequisites": ["사전 요구사항1", "사전 요구사항2"],
-        "final_goals": ["최종 목표1", "최종 목표2"],
-        "version_info": "사용된 주요 기술의 최신 버전 정보",
+        "prerequisites": ["요구사항1", "요구사항2"],
+        "final_goals": ["목표1", "목표2"],
+        "version_info": "최신 버전 정보",
         "last_updated": "{current_date}"
     }}
     
-    JSON 형식으로만 응답해주세요. 절대 구버전 정보를 포함하지 마세요.
+    다른 설명 없이 오직 JSON만 응답하세요.
     """
     
     try:
@@ -81,23 +80,48 @@ def generate_roadmap(topic, level, detailed_level, duration):
             return None
             
         response = st.session_state.openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=model,
             messages=[
                 {"role": "system", "content": "당신은 개발자를 위한 학습 로드맵 전문가입니다. 항상 JSON 형식으로 응답하세요."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.7,
-            max_tokens=2000
+            temperature=temperature,
+            max_tokens=max_tokens
         )
         
         content = response.choices[0].message.content
-        # JSON 추출 (코드 블록이 있는 경우 제거)
+        
+        # JSON 추출 및 정제
         if "```json" in content:
             content = content.split("```json")[1].split("```")[0]
         elif "```" in content:
             content = content.split("```")[1].split("```")[0]
         
-        return json.loads(content.strip())
+        # 앞뒤 공백 제거
+        content = content.strip()
+        
+        # JSON 파싱 시도
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError as json_error:
+            st.error(f"JSON 파싱 오류: {str(json_error)}")
+            st.error("AI 응답 내용:")
+            st.code(content)
+            
+            # 간단한 JSON 수정 시도
+            try:
+                # 흔한 JSON 오류들 수정
+                fixed_content = content
+                # 마지막 쉼표 제거
+                fixed_content = re.sub(r',(\s*[}\]])', r'\1', fixed_content)
+                # 잘못된 따옴표 수정
+                fixed_content = fixed_content.replace('"', '"').replace('"', '"')
+                fixed_content = fixed_content.replace(''', "'").replace(''', "'")
+                
+                return json.loads(fixed_content)
+            except:
+                st.error("JSON 자동 수정도 실패했습니다. 다시 시도해주세요.")
+                return None
     except Exception as e:
         st.error(f"로드맵 생성 중 오류 발생: {str(e)}")
         return None
@@ -158,12 +182,68 @@ st.markdown("---")
 # API 키 입력
 with st.sidebar:
     st.header("⚙️ 설정")
+    
+    # Dev 모드 토글
+    dev_mode = st.checkbox(
+        "🔧 개발자 모드",
+        value=False,
+        help="고급 설정 및 다양한 모델 선택 가능"
+    )
+    
     api_key_input = st.text_input(
         "OpenAI API Key", 
         value=st.session_state.openai_api_key,
         type="password",
         help="OpenAI API 키를 입력하세요"
     )
+    
+    # Dev 모드일 때만 모델 선택 표시
+    if dev_mode:
+        st.markdown("---")
+        st.subheader("🤖 모델 설정")
+        
+        model_choice = st.selectbox(
+            "사용할 모델",
+            [
+                "gpt-4o-mini",
+                "gpt-4o", 
+                "gpt-4-turbo",
+                "gpt-4",
+                "gpt-3.5-turbo"
+            ],
+            index=0,
+            help="다양한 OpenAI 모델을 테스트할 수 있습니다"
+        )
+        
+        temperature = st.slider(
+            "Temperature",
+            min_value=0.0,
+            max_value=2.0,
+            value=0.7,
+            step=0.1,
+            help="창의성 조절 (0: 일관성, 2: 창의성)"
+        )
+        
+        max_tokens = st.number_input(
+            "Max Tokens",
+            min_value=500,
+            max_value=4000,
+            value=2000,
+            step=100,
+            help="응답 최대 길이"
+        )
+        
+        st.info("💡 **모델 특징:**\n"
+                "- **gpt-4o**: 최신 고성능 모델\n"
+                "- **gpt-4o-mini**: 빠르고 효율적\n"
+                "- **gpt-4-turbo**: 긴 컨텍스트 지원\n"
+                "- **gpt-4**: 고품질 추론\n"
+                "- **gpt-3.5-turbo**: 빠르고 경제적")
+    else:
+        # 일반 모드에서는 기본값 사용
+        model_choice = "gpt-4o-mini"
+        temperature = 0.7
+        max_tokens = 2000
     
     if api_key_input != st.session_state.openai_api_key:
         st.session_state.openai_api_key = api_key_input
@@ -219,6 +299,30 @@ with col2:
         value=True,
         help="주제 관련 최신 공식 문서를 검색합니다"
     )
+    
+    # Dev 모드일 때 추가 정보 표시
+    if dev_mode:
+        st.markdown("---")
+        st.subheader("🔍 Dev 정보")
+        st.write(f"**선택된 모델:** {model_choice}")
+        st.write(f"**Temperature:** {temperature}")
+        st.write(f"**Max Tokens:** {max_tokens}")
+        
+        if st.button("🧪 모델 테스트"):
+            if not init_openai():
+                st.error("❌ OpenAI API 키를 먼저 설정해주세요!")
+            else:
+                with st.spinner("모델 테스트 중..."):
+                    try:
+                        test_response = st.session_state.openai_client.chat.completions.create(
+                            model=model_choice,
+                            messages=[{"role": "user", "content": "Hello, this is a test."}],
+                            max_tokens=50
+                        )
+                        st.success(f"✅ {model_choice} 모델이 정상 작동합니다!")
+                        st.write(f"테스트 응답: {test_response.choices[0].message.content}")
+                    except Exception as e:
+                        st.error(f"❌ 모델 테스트 실패: {str(e)}")
 
 # 로드맵 생성
 if st.button("🚀 로드맵 생성", type="primary", use_container_width=True):
@@ -231,7 +335,7 @@ if st.button("🚀 로드맵 생성", type="primary", use_container_width=True):
         st.stop()
     
     with st.spinner("🤖 AI가 최신 정보 기반 로드맵을 생성하고 있습니다..."):
-        roadmap_data = generate_roadmap(topic, level, detailed_level, duration)
+        roadmap_data = generate_roadmap(topic, level, detailed_level, duration, model_choice, temperature, max_tokens)
     
     if roadmap_data:
         st.success("✅ 로드맵이 생성되었습니다!")
@@ -240,8 +344,14 @@ if st.button("🚀 로드맵 생성", type="primary", use_container_width=True):
         st.header(f"📋 {topic} 학습 로드맵")
         
         # 버전 정보 및 최신성 표시
-        if 'version_info' in roadmap_data:
-            st.info(f"📅 **최신 버전 기준**: {roadmap_data.get('version_info', '')} (생성일: {roadmap_data.get('last_updated', '')})")
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            if 'version_info' in roadmap_data:
+                st.info(f"📅 **최신 버전 기준**: {roadmap_data.get('version_info', '')} (생성일: {roadmap_data.get('last_updated', '')})")
+        with col2:
+            if dev_mode:
+                st.info(f"🤖 **사용 모델**: {model_choice}")
+
         
         # 사전 요구사항
         if 'prerequisites' in roadmap_data:

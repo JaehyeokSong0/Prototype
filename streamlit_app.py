@@ -161,44 +161,29 @@ def pdf_export_button_html(file_name):
         expanders.forEach(expander => {
             if (!expander.open) expander.open = true;
         });
+        
+        const originalScrollTop = elementToCapture.scrollTop;
+        elementToCapture.scrollTop = 0; // 캡처 전 맨 위로 스크롤
 
         // 렌더링 대기
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        const originalScrollTop = elementToCapture.scrollTop;
-        const totalHeight = elementToCapture.scrollHeight;
-        const viewHeight = elementToCapture.clientHeight;
-        
-        const finalCanvas = document.createElement('canvas');
-        finalCanvas.width = elementToCapture.scrollWidth * 2; // Scale for quality
-        finalCanvas.height = totalHeight * 2;
-        const ctx = finalCanvas.getContext('2d');
-        ctx.scale(2, 2);
+        await new Promise(resolve => setTimeout(resolve, 1000)); // 1초 대기
 
         try {
-            for (let y = 0; y < totalHeight; y += viewHeight) {
-                elementToCapture.scrollTop = y;
-                await new Promise(resolve => setTimeout(resolve, 200)); // 스크롤 후 렌더링 대기
-                
-                const canvasPart = await html2canvas(elementToCapture, {
-                    useCORS: true,
-                    allowTaint: true,
-                    scale: 2,
-                    y: -y, // 캡처 시작 y 위치 지정
-                    height: viewHeight,
-                    windowHeight: viewHeight
-                });
-                ctx.drawImage(canvasPart, 0, y);
-            }
+            const canvas = await html2canvas(elementToCapture, {
+                useCORS: true,
+                allowTaint: true,
+                scale: 2,
+                height: elementToCapture.scrollHeight,
+                windowHeight: elementToCapture.scrollHeight
+            });
 
-            // PDF 생성
             const { jsPDF } = window.jspdf;
-            const imgData = finalCanvas.toDataURL('image/png', 1.0);
+            const imgData = canvas.toDataURL('image/png', 1.0);
             const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
             
             const pdfWidth = pdf.internal.pageSize.getWidth();
             const pdfHeight = pdf.internal.pageSize.getHeight();
-            const canvasAspectRatio = finalCanvas.width / finalCanvas.height;
+            const canvasAspectRatio = canvas.width / canvas.height;
             
             const finalImgWidth = pdfWidth;
             const finalImgHeight = pdfWidth / canvasAspectRatio;

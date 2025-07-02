@@ -1,12 +1,9 @@
 import streamlit as st
 from openai import OpenAI
-import requests
-from bs4 import BeautifulSoup
 import json
-import time
 from datetime import datetime
-import re
 from io import BytesIO
+import streamlit.components.v1 as components
 
 # --- 페이지 설정 ---
 st.set_page_config(
@@ -33,10 +30,6 @@ if 'current_duration' not in st.session_state:
     st.session_state.current_duration = "2개월"
 if 'current_dev_mode' not in st.session_state:
     st.session_state.current_dev_mode = False
-if 'current_include_verification' not in st.session_state:
-    st.session_state.current_include_verification = True
-if 'current_search_latest' not in st.session_state:
-    st.session_state.current_search_latest = True
 
 # 고급 설정 (개발자 모드)
 if 'current_model' not in st.session_state:
@@ -144,144 +137,109 @@ def generate_roadmap(topic, level, detailed_level, duration, model, temperature,
         st.error(f"로드맵 생성 중 오류 발생: {str(e)}")
         return None
 
-def generate_full_app_pdf():
-    """현재 앱의 전체 상태를 PDF 데이터로 생성하여 바이트 형태로 반환"""
-    try:
-        from reportlab.lib.pagesizes import letter
-        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-        from reportlab.lib.units import inch
-        from reportlab.lib import colors
-        from reportlab.pdfbase import pdfmetrics
-        from reportlab.pdfbase.ttfonts import TTFont
+def pdf_export_button_html(file_name):
+    """화면 캡처 및 PDF 저장을 위한 HTML/JS 코드를 반환"""
+    button_label = "📥 화면 캡처하여 PDF로 저장"
+    loading_label = "⏳ PDF 생성 중..."
+    
+    html_code = f"""
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        .pdf-btn {{
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            font-size: 1rem;
+            font-weight: 600;
+            color: white;
+            background-color: #FF4B4B;
+            border: none;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            text-align: center;
+            width: 100%;
+            transition: background-color 0.2s;
+        }}
+        .pdf-btn:hover {{
+            background-color: #E03A3A;
+        }}
+        .pdf-btn:disabled {{
+            background-color: #A0A0A0;
+            cursor: not-allowed;
+        }}
+    </style>
+    <button id="export-pdf-btn" class="pdf-btn">{button_label}</button>
+    <script>
+    const exportPdfButton = document.getElementById('export-pdf-btn');
+    exportPdfButton.addEventListener('click', function() {{
+        exportPdfButton.innerText = '{loading_label}';
+        exportPdfButton.disabled = true;
+
+        // Streamlit 앱의 메인 컨텐츠 영역을 타겟으로 지정
+        const elementToCapture = window.parent.document.querySelector('[data-testid="stAppViewContainer"]');
         
-        buffer = BytesIO()
-        
-        # 한글 폰트 설정 시도
-        try:
-            pdfmetrics.registerFont(TTFont('NanumGothic', 'NanumGothic.ttf')) # 로컬에 폰트 파일이 있다고 가정
-            korean_font = 'NanumGothic'
-        except:
-            korean_font = 'Helvetica' # 실패 시 기본 폰트
+        if (!elementToCapture) {{
+            alert('캡처할 영역을 찾지 못했습니다.');
+            exportPdfButton.innerText = '{button_label}';
+            exportPdfButton.disabled = false;
+            return;
+        }}
 
-        doc = SimpleDocTemplate(buffer, pagesize=letter, topMargin=0.5*inch, bottomMargin=0.5*inch)
-        styles = getSampleStyleSheet()
-        
-        # 한글 폰트 적용 스타일
-        styles.add(ParagraphStyle(name='KoreanNormal', fontName=korean_font, fontSize=10, leading=14))
-        styles.add(ParagraphStyle(name='KoreanHeading1', fontName=korean_font, fontSize=24, leading=30, spaceAfter=20, textColor=colors.darkblue, alignment=1))
-        styles.add(ParagraphStyle(name='KoreanHeading2', fontName=korean_font, fontSize=18, leading=22, spaceAfter=15, textColor=colors.darkslateblue))
-        styles.add(ParagraphStyle(name='KoreanHeading3', fontName=korean_font, fontSize=14, leading=18, spaceAfter=10, textColor=colors.darkslategray))
-        styles.add(ParagraphStyle(name='KoreanHeading4', fontName=korean_font, fontSize=12, leading=14, spaceAfter=8, textColor=colors.black))
-
-        story = []
-        
-        story.append(Paragraph("AI 학습 로드맵 생성기 - 전체 상태 스냅샷", styles['KoreanHeading1']))
-        story.append(Paragraph(f"생성 일시: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", styles['KoreanNormal']))
-        story.append(Spacer(1, 20))
-
-        # === 사이드바 설정 정보 ===
-        story.append(Paragraph("⚙️ 사이드바 설정", styles['KoreanHeading2']))
-        settings_data = [
-            ["설정 항목", "값"],
-            ["API 키", "설정됨" if st.session_state.openai_api_key else "미설정"],
-            ["개발자 모드", "활성화" if st.session_state.current_dev_mode else "비활성화"],
-        ]
-        if st.session_state.current_dev_mode:
-            settings_data.extend([
-                ["선택된 모델", st.session_state.current_model],
-                ["Temperature", str(st.session_state.current_temperature)],
-                ["Max Tokens", str(st.session_state.current_max_tokens)]
-            ])
-        
-        settings_table = Table(settings_data, colWidths=[2.5*inch, 3*inch])
-        settings_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.darkblue), ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'), ('FONTNAME', (0, 0), (-1, -1), korean_font),
-            ('FONTSIZE', (0, 0), (-1, -1), 10), ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.lightgrey), ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        story.append(settings_table)
-        story.append(Spacer(1, 20))
-
-        # === 메인 입력 정보 ===
-        story.append(Paragraph("📚 학습 정보 입력", styles['KoreanHeading2']))
-        input_data = [
-            ["입력 항목", "입력 값"],
-            ["학습 주제", st.session_state.current_topic or "입력되지 않음"],
-            ["현재 수준", st.session_state.current_level],
-            ["학습 기간", st.session_state.current_duration],
-            ["상세 설명", st.session_state.current_detailed_level or "없음"],
-        ]
-        input_table = Table(input_data, colWidths=[2.5*inch, 3*inch])
-        input_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.darkgreen), ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'), ('FONTNAME', (0, 0), (-1, -1), korean_font),
-            ('FONTSIZE', (0, 0), (-1, -1), 10), ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('BACKGROUND', (0, 1), (-1, -1), colors.lightgreen), ('GRID', (0, 0), (-1, -1), 1, colors.black)
-        ]))
-        story.append(input_table)
-        story.append(Spacer(1, 20))
-
-        # === 생성된 로드맵 ===
-        if st.session_state.generated_roadmap:
-            roadmap = st.session_state.generated_roadmap
-            story.append(Paragraph("📋 생성된 학습 로드맵", styles['KoreanHeading2']))
-            story.append(Paragraph(f"<b>버전 기준:</b> {roadmap.get('version_info', 'N/A')}", styles['KoreanNormal']))
-            story.append(Paragraph(f"<b>생성일:</b> {roadmap.get('last_updated', 'N/A')}", styles['KoreanNormal']))
-            story.append(Spacer(1, 10))
-
-            if 'prerequisites' in roadmap and roadmap['prerequisites']:
-                story.append(Paragraph("📌 사전 요구사항", styles['KoreanHeading3']))
-                for item in roadmap['prerequisites']:
-                    story.append(Paragraph(f"• {item}", styles['KoreanNormal']))
-                story.append(Spacer(1, 10))
-
-            if 'roadmap' in roadmap:
-                for week_data in roadmap['roadmap']:
-                    story.append(Paragraph(f"📖 {week_data.get('week', 'X')}주차: {week_data.get('title', '')}", styles['KoreanHeading4']))
-                    
-                    details = [
-                        ("<b>📚 학습 주제:</b>", week_data.get('topics')),
-                        ("<b>🎯 목표:</b>", [week_data.get('goals')]),
-                        ("<b>🛠️ 실습 과제:</b>", week_data.get('practical_tasks')),
-                        ("<b>📦 완성 목표:</b>", week_data.get('deliverables')),
-                        ("<b>🔗 학습 자료:</b>", week_data.get('resources')),
-                        ("<b>🔍 이번 주 특화 검색:</b>", week_data.get('week_specific_keywords')),
-                    ]
-                    for title, items in details:
-                        if items:
-                            story.append(Paragraph(title, styles['KoreanNormal']))
-                            for item in items:
-                                story.append(Paragraph(f"&nbsp;&nbsp;• {item}", styles['KoreanNormal']))
-                    story.append(Spacer(1, 15))
-
-            if 'final_goals' in roadmap and roadmap['final_goals']:
-                story.append(Paragraph("🏆 최종 완성 목표", styles['KoreanHeading3']))
-                for goal in roadmap['final_goals']:
-                    story.append(Paragraph(f"• {goal}", styles['KoreanNormal']))
-                story.append(Spacer(1, 10))
+        html2canvas(elementToCapture, {{
+            useCORS: true, // CORS 이슈 방지
+            allowTaint: true,
+            scale: 2, // 해상도를 높여서 선명하게
+            // 스크롤이 있는 전체 페이지를 캡처하도록 설정
+            windowWidth: elementToCapture.scrollWidth,
+            windowHeight: elementToCapture.scrollHeight
+        }}).then(canvas => {{
+            const { jsPDF } = window.jspdf;
+            const imgData = canvas.toDataURL('image/png', 1.0);
             
-            if 'difficulty_progression' in roadmap:
-                story.append(Paragraph("📈 난이도 진행", styles['KoreanHeading3']))
-                story.append(Paragraph(roadmap['difficulty_progression'], styles['KoreanNormal']))
-        else:
-            story.append(Paragraph("로드맵이 아직 생성되지 않았습니다.", styles['KoreanNormal']))
+            const pdf = new jsPDF({{
+                orientation: 'p',
+                unit: 'mm',
+                format: 'a4'
+            }});
 
-        doc.build(story)
-        buffer.seek(0)
-        return buffer.getvalue()
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const canvasWidth = canvas.width;
+            const canvasHeight = canvas.height;
+            const canvasAspectRatio = canvasWidth / canvasHeight;
+            const pdfAspectRatio = pdfWidth / pdfHeight;
 
-    except ImportError:
-        st.error("❌ PDF 생성을 위해 reportlab, nanum-gothic-coding-font 패키지를 설치해주세요.")
-        st.code("pip install reportlab nanum-gothic-coding-font")
-        return None
-    except Exception as e:
-        st.error(f"❌ PDF 생성 중 오류 발생: {str(e)}")
-        if st.session_state.current_dev_mode:
-            import traceback
-            st.code(traceback.format_exc())
-        return None
+            let finalImgWidth, finalImgHeight;
+
+            // 캔버스 비율에 맞춰 PDF에 이미지 크기 조정
+            finalImgWidth = pdfWidth;
+            finalImgHeight = pdfWidth / canvasAspectRatio;
+            
+            let currentHeight = 0;
+            const totalCanvasHeight = canvas.height;
+            const totalPdfPages = Math.ceil(finalImgHeight / pdfHeight);
+
+            for (let i = 0; i < totalPdfPages; i++) {{
+                if (i > 0) {{
+                    pdf.addPage();
+                }}
+                // 전체 캔버스에서 현재 페이지에 해당하는 부분만 잘라내어 추가
+                pdf.addImage(imgData, 'PNG', 0, -i * pdfHeight, finalImgWidth, finalImgHeight);
+            }}
+
+            pdf.save('{file_name}');
+            
+            exportPdfButton.innerText = '{button_label}';
+            exportPdfButton.disabled = false;
+        }}).catch(err => {{
+            alert('PDF 생성 중 오류가 발생했습니다: ' + err);
+            exportPdfButton.innerText = '{button_label}';
+            exportPdfButton.disabled = false;
+        }});
+    }});
+    </script>
+    """
+    return html_code
 
 # --- 사이드바 UI ---
 with st.sidebar:
@@ -363,7 +321,6 @@ if submitted:
         if roadmap_data:
             st.session_state.generated_roadmap = roadmap_data
             st.success("✅ 로드맵이 성공적으로 생성되었습니다! 아래에서 내용을 확인하세요.")
-            # st.rerun()을 호출하여 즉시 화면을 다시 그리게 할 수 있습니다.
         else:
             st.error("❌ 로드맵 생성에 실패했습니다. 잠시 후 다시 시도하거나, 개발자 모드에서 모델 설정을 변경해보세요.")
 
@@ -426,23 +383,17 @@ if st.session_state.generated_roadmap:
             st.subheader("📈 난이도 진행")
             st.info(roadmap_data['difficulty_progression'])
 
-    # --- 내보내기 기능 ---
+    # --- 내보내기 기능 (화면 캡처 방식) ---
     st.markdown("---")
-    st.header("📄 로드맵 내보내기")
+    st.header("📄 로드맵 내보내기 (화면 캡처)")
+    st.info("아래 버튼을 누르면 현재 보이는 전체 페이지가 스크린샷 형태로 PDF에 저장됩니다.")
     
-    pdf_data = generate_full_app_pdf()
-    if pdf_data:
-        current_time_filename = datetime.now().strftime("%Y%m%d_%H%M")
-        filename = f"AI_Roadmap_{topic.replace(' ', '_')}_{current_time_filename}.pdf"
-        
-        st.download_button(
-            label="📥 전체 로드맵 PDF 다운로드",
-            data=pdf_data,
-            file_name=filename,
-            mime="application/pdf",
-            help="현재 설정과 생성된 전체 로드맵을 PDF 파일로 저장합니다.",
-            use_container_width=True
-        )
+    current_time_filename = datetime.now().strftime("%Y%m%d_%H%M")
+    filename = f"AI_Roadmap_{topic.replace(' ', '_')}_{current_time_filename}.pdf"
+    
+    html_code = pdf_export_button_html(filename)
+    components.html(html_code, height=50)
+
 
 # --- 푸터 ---
 st.markdown("---")

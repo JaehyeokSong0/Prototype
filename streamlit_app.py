@@ -142,11 +142,85 @@ def pdf_export_button_html(file_name):
     button_label = "📥 화면 캡처하여 PDF로 저장"
     loading_label = "⏳ PDF 생성 중..."
     
-    html_code = f"""
+    # f-string 포맷팅 문제를 피하기 위해 문자열을 분리하여 구성
+    script = """
+    const exportPdfButton = document.getElementById('export-pdf-btn');
+    exportPdfButton.addEventListener('click', function() {
+        exportPdfButton.innerText = '""" + loading_label + """';
+        exportPdfButton.disabled = true;
+
+        // Streamlit 앱의 메인 컨텐츠 영역을 타겟으로 지정
+        const elementToCapture = window.parent.document.querySelector('[data-testid="stAppViewContainer"]');
+        
+        if (!elementToCapture) {
+            alert('캡처할 영역을 찾지 못했습니다.');
+            exportPdfButton.innerText = '""" + button_label + """';
+            exportPdfButton.disabled = false;
+            return;
+        }
+
+        // 모든 expander(details 태그)를 찾아서 엽니다.
+        const expanders = elementToCapture.querySelectorAll('details');
+        expanders.forEach(expander => {
+            if (!expander.open) {
+                expander.open = true;
+            }
+        });
+
+        // expander가 열리고 UI가 렌더링될 시간을 줍니다.
+        setTimeout(() => {
+            html2canvas(elementToCapture, {
+                useCORS: true, // CORS 이슈 방지
+                allowTaint: true,
+                scale: 2, // 해상도를 높여서 선명하게
+                // 스크롤이 있는 전체 페이지를 캡처하도록 설정
+                windowWidth: elementToCapture.scrollWidth,
+                windowHeight: elementToCapture.scrollHeight
+            }).then(canvas => {
+                const { jsPDF } = window.jspdf;
+                const imgData = canvas.toDataURL('image/png', 1.0);
+                
+                const pdf = new jsPDF({
+                    orientation: 'p',
+                    unit: 'mm',
+                    format: 'a4'
+                });
+
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = pdf.internal.pageSize.getHeight();
+                const canvasAspectRatio = canvas.width / canvas.height;
+
+                const finalImgWidth = pdfWidth;
+                const finalImgHeight = pdfWidth / canvasAspectRatio;
+                
+                const totalPdfPages = Math.ceil(finalImgHeight / pdfHeight);
+
+                for (let i = 0; i < totalPdfPages; i++) {
+                    if (i > 0) {
+                        pdf.addPage();
+                    }
+                    // 전체 캔버스에서 현재 페이지에 해당하는 부분만 잘라내어 추가
+                    pdf.addImage(imgData, 'PNG', 0, -i * pdfHeight, finalImgWidth, finalImgHeight);
+                }
+
+                pdf.save('""" + file_name + """');
+                
+                exportPdfButton.innerText = '""" + button_label + """';
+                exportPdfButton.disabled = false;
+            }).catch(err => {
+                alert('PDF 생성 중 오류가 발생했습니다: ' + err);
+                exportPdfButton.innerText = '""" + button_label + """';
+                exportPdfButton.disabled = false;
+            });
+        }, 500); // 0.5초 딜레이로 UI 렌더링 대기
+    });
+    """
+    
+    html_code = """
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
-        .pdf-btn {{
+        .pdf-btn {
             display: inline-block;
             padding: 0.75rem 1.5rem;
             font-size: 1rem;
@@ -159,78 +233,18 @@ def pdf_export_button_html(file_name):
             text-align: center;
             width: 100%;
             transition: background-color 0.2s;
-        }}
-        .pdf-btn:hover {{
+        }
+        .pdf-btn:hover {
             background-color: #E03A3A;
-        }}
-        .pdf-btn:disabled {{
+        }
+        .pdf-btn:disabled {
             background-color: #A0A0A0;
             cursor: not-allowed;
-        }}
+        }
     </style>
-    <button id="export-pdf-btn" class="pdf-btn">{button_label}</button>
+    <button id="export-pdf-btn" class="pdf-btn">""" + button_label + """</button>
     <script>
-    const exportPdfButton = document.getElementById('export-pdf-btn');
-    exportPdfButton.addEventListener('click', function() {{
-        exportPdfButton.innerText = '{loading_label}';
-        exportPdfButton.disabled = true;
-
-        // Streamlit 앱의 메인 컨텐츠 영역을 타겟으로 지정
-        const elementToCapture = window.parent.document.querySelector('[data-testid="stAppViewContainer"]');
-        
-        if (!elementToCapture) {{
-            alert('캡처할 영역을 찾지 못했습니다.');
-            exportPdfButton.innerText = '{button_label}';
-            exportPdfButton.disabled = false;
-            return;
-        }}
-
-        html2canvas(elementToCapture, {{
-            useCORS: true, // CORS 이슈 방지
-            allowTaint: true,
-            scale: 2, // 해상도를 높여서 선명하게
-            // 스크롤이 있는 전체 페이지를 캡처하도록 설정
-            windowWidth: elementToCapture.scrollWidth,
-            windowHeight: elementToCapture.scrollHeight
-        }}).then(canvas => {{
-            const {{ jsPDF }} = window.jspdf;
-            const imgData = canvas.toDataURL('image/png', 1.0);
-            
-            const pdf = new jsPDF({{
-                orientation: 'p',
-                unit: 'mm',
-                format: 'a4'
-            }});
-
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            const canvasWidth = canvas.width;
-            const canvasHeight = canvas.height;
-            const canvasAspectRatio = canvasWidth / canvasHeight;
-
-            const finalImgWidth = pdfWidth;
-            const finalImgHeight = pdfWidth / canvasAspectRatio;
-            
-            const totalPdfPages = Math.ceil(finalImgHeight / pdfHeight);
-
-            for (let i = 0; i < totalPdfPages; i++) {{
-                if (i > 0) {{
-                    pdf.addPage();
-                }}
-                // 전체 캔버스에서 현재 페이지에 해당하는 부분만 잘라내어 추가
-                pdf.addImage(imgData, 'PNG', 0, -i * pdfHeight, finalImgWidth, finalImgHeight);
-            }}
-
-            pdf.save('{file_name}');
-            
-            exportPdfButton.innerText = '{button_label}';
-            exportPdfButton.disabled = false;
-        }}).catch(err => {{
-            alert('PDF 생성 중 오류가 발생했습니다: ' + err);
-            exportPdfButton.innerText = '{button_label}';
-            exportPdfButton.disabled = false;
-        }});
-    }});
+    """ + script + """
     </script>
     """
     return html_code

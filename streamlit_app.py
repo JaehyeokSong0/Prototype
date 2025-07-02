@@ -193,7 +193,7 @@ def pdf_export_button_html(file_name):
             windowWidth: elementToCapture.scrollWidth,
             windowHeight: elementToCapture.scrollHeight
         }}).then(canvas => {{
-            const { jsPDF } = window.jspdf;
+            const {{ jsPDF }} = window.jspdf;
             const imgData = canvas.toDataURL('image/png', 1.0);
             
             const pdf = new jsPDF({{
@@ -207,16 +207,10 @@ def pdf_export_button_html(file_name):
             const canvasWidth = canvas.width;
             const canvasHeight = canvas.height;
             const canvasAspectRatio = canvasWidth / canvasHeight;
-            const pdfAspectRatio = pdfWidth / pdfHeight;
 
-            let finalImgWidth, finalImgHeight;
-
-            // 캔버스 비율에 맞춰 PDF에 이미지 크기 조정
-            finalImgWidth = pdfWidth;
-            finalImgHeight = pdfWidth / canvasAspectRatio;
+            const finalImgWidth = pdfWidth;
+            const finalImgHeight = pdfWidth / canvasAspectRatio;
             
-            let currentHeight = 0;
-            const totalCanvasHeight = canvas.height;
             const totalPdfPages = Math.ceil(finalImgHeight / pdfHeight);
 
             for (let i = 0; i < totalPdfPages; i++) {{

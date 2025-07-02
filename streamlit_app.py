@@ -149,10 +149,11 @@ def pdf_export_button_html(file_name):
         exportPdfButton.innerText = '""" + loading_label + """';
         exportPdfButton.disabled = true;
 
-        // Streamlit 앱의 메인 컨텐츠 영역을 타겟으로 지정
-        const elementToCapture = window.parent.document.querySelector('[data-testid="stAppViewContainer"]');
+        // Streamlit 앱의 메인 컨텐츠 영역과 전체 body를 타겟으로 지정
+        const appContainer = window.parent.document.querySelector('[data-testid="stAppViewContainer"]');
+        const body = window.parent.document.body;
         
-        if (!elementToCapture) {
+        if (!appContainer) {
             alert('캡처할 영역을 찾지 못했습니다.');
             exportPdfButton.innerText = '""" + button_label + """';
             exportPdfButton.disabled = false;
@@ -160,22 +161,27 @@ def pdf_export_button_html(file_name):
         }
 
         // 모든 expander(details 태그)를 찾아서 엽니다.
-        const expanders = elementToCapture.querySelectorAll('details');
+        const expanders = appContainer.querySelectorAll('details');
         expanders.forEach(expander => {
             if (!expander.open) {
                 expander.open = true;
             }
         });
 
+        // 캡처 전 스크롤을 맨 위로 이동
+        appContainer.scrollTo(0, 0);
+
         // expander가 열리고 UI가 렌더링될 시간을 줍니다.
         setTimeout(() => {
-            html2canvas(elementToCapture, {
-                useCORS: true, // CORS 이슈 방지
+            html2canvas(body, { // 캡처 대상을 body로 변경
+                useCORS: true,
                 allowTaint: true,
-                scale: 2, // 해상도를 높여서 선명하게
-                // 스크롤이 있는 전체 페이지를 캡처하도록 설정
-                windowWidth: elementToCapture.scrollWidth,
-                windowHeight: elementToCapture.scrollHeight
+                scale: 2,
+                // body의 전체 스크롤 크기를 기준으로 캡처
+                width: body.scrollWidth,
+                height: body.scrollHeight,
+                windowWidth: body.scrollWidth,
+                windowHeight: body.scrollHeight
             }).then(canvas => {
                 const { jsPDF } = window.jspdf;
                 const imgData = canvas.toDataURL('image/png', 1.0);
@@ -199,7 +205,6 @@ def pdf_export_button_html(file_name):
                     if (i > 0) {
                         pdf.addPage();
                     }
-                    // 전체 캔버스에서 현재 페이지에 해당하는 부분만 잘라내어 추가
                     pdf.addImage(imgData, 'PNG', 0, -i * pdfHeight, finalImgWidth, finalImgHeight);
                 }
 
@@ -212,7 +217,7 @@ def pdf_export_button_html(file_name):
                 exportPdfButton.innerText = '""" + button_label + """';
                 exportPdfButton.disabled = false;
             });
-        }, 500); // 0.5초 딜레이로 UI 렌더링 대기
+        }, 1000); // 딜레이를 1초로 늘림
     });
     """
     
@@ -388,7 +393,7 @@ if st.session_state.generated_roadmap:
                 st.write(f"• {goal}")
     with final_col2:
         if 'difficulty_progression' in roadmap_data:
-            st.subheader("📈 난이도 진행")
+            st.subheader("� 난이도 진행")
             st.info(roadmap_data['difficulty_progression'])
 
     # --- 내보내기 기능 (화면 캡처 방식) ---
@@ -408,3 +413,4 @@ st.markdown("---")
 st.markdown("💡 **팁**: 현재 수준을 상세히 설명할수록 더 구체적이고 실행 가능한 로드맵을 받을 수 있습니다!")
 st.markdown("🎯 **목표**: 각 주차별로 실제 완성할 수 있는 구체적인 결과물이 있는 로드맵")
 st.markdown("🔄 **최신성 보장**: 모든 로드맵은 2025년 최신 버전 기준으로 생성됩니다.")
+�

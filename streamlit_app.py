@@ -142,82 +142,83 @@ def pdf_export_button_html(file_name):
     button_label = "📥 화면 캡처하여 PDF로 저장"
     loading_label = "⏳ PDF 생성 중..."
     
-    # f-string 포맷팅 문제를 피하기 위해 문자열을 분리하여 구성
     script = """
     const exportPdfButton = document.getElementById('export-pdf-btn');
-    exportPdfButton.addEventListener('click', function() {
+    exportPdfButton.addEventListener('click', async function() {
         exportPdfButton.innerText = '""" + loading_label + """';
         exportPdfButton.disabled = true;
 
-        // Streamlit 앱의 메인 컨텐츠 영역과 전체 body를 타겟으로 지정
-        const appContainer = window.parent.document.querySelector('[data-testid="stAppViewContainer"]');
-        const body = window.parent.document.body;
-        
-        if (!appContainer) {
+        const elementToCapture = window.parent.document.querySelector('[data-testid="stAppViewContainer"]');
+        if (!elementToCapture) {
             alert('캡처할 영역을 찾지 못했습니다.');
             exportPdfButton.innerText = '""" + button_label + """';
             exportPdfButton.disabled = false;
             return;
         }
 
-        // 모든 expander(details 태그)를 찾아서 엽니다.
-        const expanders = appContainer.querySelectorAll('details');
+        // 모든 expander를 열기
+        const expanders = elementToCapture.querySelectorAll('details');
         expanders.forEach(expander => {
-            if (!expander.open) {
-                expander.open = true;
-            }
+            if (!expander.open) expander.open = true;
         });
 
-        // 캡처 전 스크롤을 맨 위로 이동
-        appContainer.scrollTo(0, 0);
+        // 렌더링 대기
+        await new Promise(resolve => setTimeout(resolve, 500));
 
-        // expander가 열리고 UI가 렌더링될 시간을 줍니다.
-        setTimeout(() => {
-            html2canvas(body, { // 캡처 대상을 body로 변경
-                useCORS: true,
-                allowTaint: true,
-                scale: 2,
-                // body의 전체 스크롤 크기를 기준으로 캡처
-                width: body.scrollWidth,
-                height: body.scrollHeight,
-                windowWidth: body.scrollWidth,
-                windowHeight: body.scrollHeight
-            }).then(canvas => {
-                const { jsPDF } = window.jspdf;
-                const imgData = canvas.toDataURL('image/png', 1.0);
+        const originalScrollTop = elementToCapture.scrollTop;
+        const totalHeight = elementToCapture.scrollHeight;
+        const viewHeight = elementToCapture.clientHeight;
+        
+        const finalCanvas = document.createElement('canvas');
+        finalCanvas.width = elementToCapture.scrollWidth * 2; // Scale for quality
+        finalCanvas.height = totalHeight * 2;
+        const ctx = finalCanvas.getContext('2d');
+        ctx.scale(2, 2);
+
+        try {
+            for (let y = 0; y < totalHeight; y += viewHeight) {
+                elementToCapture.scrollTop = y;
+                await new Promise(resolve => setTimeout(resolve, 200)); // 스크롤 후 렌더링 대기
                 
-                const pdf = new jsPDF({
-                    orientation: 'p',
-                    unit: 'mm',
-                    format: 'a4'
+                const canvasPart = await html2canvas(elementToCapture, {
+                    useCORS: true,
+                    allowTaint: true,
+                    scale: 2,
+                    y: -y, // 캡처 시작 y 위치 지정
+                    height: viewHeight,
+                    windowHeight: viewHeight
                 });
+                ctx.drawImage(canvasPart, 0, y);
+            }
 
-                const pdfWidth = pdf.internal.pageSize.getWidth();
-                const pdfHeight = pdf.internal.pageSize.getHeight();
-                const canvasAspectRatio = canvas.width / canvas.height;
+            // PDF 생성
+            const { jsPDF } = window.jspdf;
+            const imgData = finalCanvas.toDataURL('image/png', 1.0);
+            const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+            
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            const canvasAspectRatio = finalCanvas.width / finalCanvas.height;
+            
+            const finalImgWidth = pdfWidth;
+            const finalImgHeight = pdfWidth / canvasAspectRatio;
+            const totalPdfPages = Math.ceil(finalImgHeight / pdfHeight);
 
-                const finalImgWidth = pdfWidth;
-                const finalImgHeight = pdfWidth / canvasAspectRatio;
-                
-                const totalPdfPages = Math.ceil(finalImgHeight / pdfHeight);
+            for (let i = 0; i < totalPdfPages; i++) {
+                if (i > 0) pdf.addPage();
+                pdf.addImage(imgData, 'PNG', 0, -i * pdfHeight, finalImgWidth, finalImgHeight);
+            }
 
-                for (let i = 0; i < totalPdfPages; i++) {
-                    if (i > 0) {
-                        pdf.addPage();
-                    }
-                    pdf.addImage(imgData, 'PNG', 0, -i * pdfHeight, finalImgWidth, finalImgHeight);
-                }
+            pdf.save('""" + file_name + """');
 
-                pdf.save('""" + file_name + """');
-                
-                exportPdfButton.innerText = '""" + button_label + """';
-                exportPdfButton.disabled = false;
-            }).catch(err => {
-                alert('PDF 생성 중 오류가 발생했습니다: ' + err);
-                exportPdfButton.innerText = '""" + button_label + """';
-                exportPdfButton.disabled = false;
-            });
-        }, 1000); // 딜레이를 1초로 늘림
+        } catch (err) {
+            alert('PDF 생성 중 오류가 발생했습니다: ' + err);
+        } finally {
+            // 원래 상태로 복구
+            elementToCapture.scrollTop = originalScrollTop;
+            exportPdfButton.innerText = '""" + button_label + """';
+            exportPdfButton.disabled = false;
+        }
     });
     """
     
@@ -226,31 +227,15 @@ def pdf_export_button_html(file_name):
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         .pdf-btn {
-            display: inline-block;
-            padding: 0.75rem 1.5rem;
-            font-size: 1rem;
-            font-weight: 600;
-            color: white;
-            background-color: #FF4B4B;
-            border: none;
-            border-radius: 0.5rem;
-            cursor: pointer;
-            text-align: center;
-            width: 100%;
-            transition: background-color 0.2s;
+            display: inline-block; padding: 0.75rem 1.5rem; font-size: 1rem; font-weight: 600;
+            color: white; background-color: #FF4B4B; border: none; border-radius: 0.5rem;
+            cursor: pointer; text-align: center; width: 100%; transition: background-color 0.2s;
         }
-        .pdf-btn:hover {
-            background-color: #E03A3A;
-        }
-        .pdf-btn:disabled {
-            background-color: #A0A0A0;
-            cursor: not-allowed;
-        }
+        .pdf-btn:hover { background-color: #E03A3A; }
+        .pdf-btn:disabled { background-color: #A0A0A0; cursor: not-allowed; }
     </style>
     <button id="export-pdf-btn" class="pdf-btn">""" + button_label + """</button>
-    <script>
-    """ + script + """
-    </script>
+    <script>""" + script + """</script>
     """
     return html_code
 
@@ -393,7 +378,7 @@ if st.session_state.generated_roadmap:
                 st.write(f"• {goal}")
     with final_col2:
         if 'difficulty_progression' in roadmap_data:
-            st.subheader("� 난이도 진행")
+            st.subheader("📈 난이도 진행")
             st.info(roadmap_data['difficulty_progression'])
 
     # --- 내보내기 기능 (화면 캡처 방식) ---

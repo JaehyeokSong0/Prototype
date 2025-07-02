@@ -166,14 +166,17 @@ def pdf_export_button_html(file_name):
         elementToCapture.scrollTop = 0; // 캡처 전 맨 위로 스크롤
 
         // 렌더링 대기
-        await new Promise(resolve => setTimeout(resolve, 1000)); // 1초 대기
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
         try {
             const canvas = await html2canvas(elementToCapture, {
                 useCORS: true,
                 allowTaint: true,
                 scale: 2,
+                backgroundColor: '#ffffff', // 배경색을 흰색으로 지정
+                width: elementToCapture.scrollWidth,
                 height: elementToCapture.scrollHeight,
+                windowWidth: elementToCapture.scrollWidth,
                 windowHeight: elementToCapture.scrollHeight
             });
 
@@ -363,7 +366,7 @@ if st.session_state.generated_roadmap:
                 st.write(f"• {goal}")
     with final_col2:
         if 'difficulty_progression' in roadmap_data:
-            st.subheader("📈 난이도 진행")
+            st.subheader("� 난이도 진행")
             st.info(roadmap_data['difficulty_progression'])
 
     # --- 내보내기 기능 (화면 캡처 방식) ---
@@ -383,3 +386,4 @@ st.markdown("---")
 st.markdown("💡 **팁**: 현재 수준을 상세히 설명할수록 더 구체적이고 실행 가능한 로드맵을 받을 수 있습니다!")
 st.markdown("🎯 **목표**: 각 주차별로 실제 완성할 수 있는 구체적인 결과물이 있는 로드맵")
 st.markdown("🔄 **최신성 보장**: 모든 로드맵은 2025년 최신 버전 기준으로 생성됩니다.")
+�
